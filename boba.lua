@@ -15,6 +15,7 @@ end
 do
 local boba_store = {
     b_aim = false,
+    b_aim_key = 0,
     b_aim_fov = 150,
     b_aim_smooth = 5.0,
     b_aim_bone = 0,
@@ -38,6 +39,7 @@ local boba_store = {
     b_silent_fov_filled = false,
 
     b_npc_aim = false,
+    b_npc_aim_bone = 0,
     b_npc_aim_fov = 150,
     b_npc_aim_smooth = 5.0,
     b_npc_aim_bone = 0,
@@ -666,11 +668,11 @@ local CFG_IDS = {
 "b_quest","b_quest_range",
 "b_extract","b_extract_range","b_hazard","b_hazard_range",
 "b_nograss",
-"b_aim","b_aim_fov","b_aim_smooth","b_aim_bone","b_aim_vis_text","b_aim_pred",
+"b_aim","b_aim_key","b_aim_fov","b_aim_smooth","b_aim_bone","b_aim_vis_text","b_aim_pred",
 "b_aim_lead","b_aim_lock",
 "b_aim_vis","b_aim_team","b_aim_fov_draw","b_aim_fov_filled",
 "b_silent","b_silent_bone","b_silent_vis_text","b_silent_multipoint","b_silent_fov","b_silent_vis","b_silent_team","b_silent_fov_draw","b_silent_fov_filled",
-"b_npc_aim","b_npc_aim_fov","b_npc_aim_smooth","b_npc_aim_bone",
+"b_npc_aim","b_npc_aim_bone","b_npc_aim_fov","b_npc_aim_smooth","b_npc_aim_bone",
 "b_npc_aim_pred","b_npc_aim_fov_draw","b_npc_aim_fov_filled",
 "b_wm","b_cross","b_cross_style","b_cross_sz","b_cross_gap","b_cross_thick","b_cross_spin","b_cross_spin_spd","b_cross_pulse","b_cross_pulse_spd","b_inspect",
 "b_inv_weap","b_inv_armor","b_inv_special","b_inv_misc",
@@ -1267,9 +1269,10 @@ cfg.quest_c   = mc("b_quest")
 cfg.quest_r   = mg("b_quest_range")
 
 cfg.aim       = mg("b_aim")
-cfg.aim_fov   = mg("b_aim_fov")
-cfg.aim_sm    = mg("b_aim_smooth")
-cfg.aim_bone  = mg("b_aim_bone")
+cfg.aim_key   = mg("b_aim_key", 0)
+cfg.aim_fov   = mg("b_aim_fov", 150)
+cfg.aim_sm    = mg("b_aim_smooth", 5.0)
+cfg.aim_bone  = mg("b_aim_bone", 0)
 cfg.aim_vis_txt = mg("b_aim_vis_text")
 cfg.aim_pred  = mg("b_aim_pred")
 cfg.aim_pred_scale = 1.0
@@ -1816,184 +1819,220 @@ end
 end
 
 
-local function get_bone_pos(p, bone_idx)
-if bone_idx == 3 then
-return nil
+local function get_player_bone_pos(p, bone_mode, scx, scy)
+    if not p then return nil end
+    local char = p.Character
+
+    local function get_part_by_name(name)
+        if char then
+            local part = char:FindFirstChild(name)
+            if part and part.Position then return part.Position end
+        end
+        return nil
+    end
+
+    local head_pos = p.HeadPosition or get_part_by_name("Head")
+    local chest_pos = get_part_by_name("UpperTorso") or get_part_by_name("Torso")
+    if not chest_pos and head_pos and p.Position then
+        chest_pos = p.Position + (head_pos - p.Position) * 0.5
+    end
+    local pelvis_pos = get_part_by_name("LowerTorso") or get_part_by_name("HumanoidRootPart") or p.Position
+    local root_pos = p.Position or pelvis_pos or head_pos
+
+    if bone_mode == 0 then
+        return head_pos or chest_pos or root_pos
+    elseif bone_mode == 1 then
+        return chest_pos or head_pos or pelvis_pos or root_pos
+    elseif bone_mode == 2 then
+        return pelvis_pos or chest_pos or root_pos
+    elseif bone_mode == 3 then
+        local candidates = { head_pos, chest_pos, pelvis_pos }
+        local best_cand = head_pos or chest_pos or pelvis_pos or root_pos
+        local best_d = 999999
+        for ci = 1, #candidates do
+            local cand = candidates[ci]
+            if cand then
+                local sx, sy, sv = utility.WorldToScreen(cand.X, cand.Y, cand.Z)
+                if sv then
+                    local d = screen_dist(sx, sy, scx or 0, scy or 0)
+                    if d < best_d then
+                        best_d = d
+                        best_cand = cand
+                    end
+                end
+            end
+        end
+        return best_cand
+    end
+    return head_pos or chest_pos or root_pos
 end
-local bname = BONE_MAP[bone_idx]
-if not bname then return nil end
-if bname == "Head" then return p.HeadPosition end
-local char = p.Character
-if not char then return nil end
-local part = char:FindFirstChild(bname)
-return part and part.Position or nil
-end
+
+local get_bone_pos = get_player_bone_pos
 
 local aim_has_visible = false
 local sil_has_visible = false
 
 local function run_player_aim()
-aim_target_ent = nil
-aim_has_visible = false
-if not cfg.aim then
-locked_target = nil
-lock_was_down = false
-return
-end
-local scx, scy = input.GetScreenCenter()
-
-if cfg.aim and cfg.aim_draw then
-    local c = cfg.aim_fov_c or {1, 1, 1, 0.25}
-    local a = c[4] or 0.25
-    if cfg.aim_fov_filled then
-        draw.CircleFilled(scx, scy, cfg.aim_fov or 100, {c[1], c[2], c[3], a * 0.4}, 64)
+    aim_target_ent = nil
+    aim_has_visible = false
+    if not cfg.aim then
+        locked_target = nil
+        lock_was_down = false
+        return
     end
-    draw.Circle(scx, scy, cfg.aim_fov or 100, c, 64)
-end
+    local scx, scy = input.GetScreenCenter()
 
-local lp = entity.GetLocalPlayer()
-if not lp or not lp.IsAlive then return end
-local cam = camera.GetPosition()
-if not cam then return end
+    if cfg.aim and cfg.aim_draw then
+        local c = cfg.aim_fov_c or {1, 1, 1, 0.25}
+        local a = c[4] or 0.25
+        if cfg.aim_fov_filled then
+            draw.CircleFilled(scx, scy, cfg.aim_fov or 100, {c[1], c[2], c[3], a * 0.4}, 64)
+        end
+        draw.Circle(scx, scy, cfg.aim_fov or 100, c, 64)
+    end
 
-if cfg.aim_vis_txt and frame_players then
-    local closest_p, closest_d = nil, cfg.aim_fov
-    for i = 1, #frame_players do
-        local p = frame_players[i]
-        if p then
-            local is_me = p.IsLocal or (lp and (p.UserId == lp.UserId or p.Name == lp.Name or (p.Address and lp.Address and p.Address == lp.Address)))
-            if not is_me and p.IsValid and p.IsAlive then
-                if not (cfg.aim_team and is_same_team(p)) then
-                    local bpos = p.HeadPosition or p.Position
-                    if bpos then
-                        local bx, by, bv = utility.WorldToScreen(bpos.X, bpos.Y, bpos.Z)
-                        if bv then
-                            local d = screen_dist(bx, by, scx, scy)
-                            if d < closest_d then
-                                closest_d = d
-                                closest_p = p
-                            end
+    local lp = entity.GetLocalPlayer()
+    if not lp then return end
+    local cam = camera.GetPosition()
+    if not cam then return end
+
+    local aim_key_mode = opt["b_aim_key"] or cfg.aim_key or 0
+    local key_active = false
+    if aim_key_mode == 0 then
+        key_active = input.IsKeyDown(0x02)
+    elseif aim_key_mode == 1 then
+        key_active = input.IsKeyDown(0x01)
+    elseif aim_key_mode == 2 then
+        key_active = input.IsKeyDown(0x12)
+    elseif aim_key_mode == 3 then
+        key_active = input.IsKeyDown(0xA0)
+    elseif aim_key_mode == 4 then
+        key_active = true
+    end
+
+    if not key_active then
+        locked_target = nil
+        lock_was_down = false
+        return
+    end
+
+    local equipped = nil
+    for wi = 1, #world.players do
+        local wp = world.players[wi]
+        if wp.name == (lp.Name or "") and wp.equipped then
+            equipped = wp.equipped
+            break
+        end
+    end
+
+    local b_mode = opt["b_aim_bone"] or cfg.aim_bone or 0
+
+    local function find_best_target()
+        local players = frame_players or entity.GetPlayers() or {}
+        local best_fov = cfg.aim_fov or 150
+        local best = nil
+
+        for i = 1, #players do
+            local p = players[i]
+            local is_me = p and (p.IsLocal or (lp and (p.UserId == lp.UserId or p.Name == lp.Name or (p.Address and lp.Address and p.Address == lp.Address))))
+            if p and not is_me and p.IsValid and p.IsAlive then
+                if cfg.aim_team and is_same_team(p) then goto skip end
+
+                local bone_pos = get_player_bone_pos(p, b_mode, scx, scy)
+                if bone_pos then
+                    if cfg.aim_vis then
+                        local vis_clear = false
+                        if raycast.IsPlayerVisible and p.Character then
+                            vis_clear = raycast.IsPlayerVisible(p.Character)
+                        end
+                        if not vis_clear and raycast.IsVisible then
+                            vis_clear = raycast.IsVisible(cam, bone_pos)
+                        end
+                        if not vis_clear then goto skip end
+                    end
+                    local bx, by, bv = utility.WorldToScreen(bone_pos.X, bone_pos.Y, bone_pos.Z)
+                    if bv then
+                        local fov = screen_dist(bx, by, scx, scy)
+                        if fov < best_fov then
+                            best_fov = fov
+                            best = { player = p, bone_pos = bone_pos }
                         end
                     end
                 end
+                ::skip::
             end
         end
+        return best
     end
-    if closest_p and check_player_visible(cam, closest_p) then
-        aim_has_visible = true
-    else
-        aim_has_visible = false
-    end
-end
 
-if not input.IsKeyDown(0x02) then
-locked_target = nil
-lock_was_down = false
-return
-end
-
-local equipped = nil
-for wi = 1, #world.players do
-local wp = world.players[wi]
-if wp.name == (lp.Name or "") and wp.equipped then
-    equipped = wp.equipped
-    break
-end
-end
-
-local function find_best_target()
-local players = frame_players
-if not players then return nil end
-local best_fov = cfg.aim_fov
-local best = nil
-
-for i = 1, #players do
-    local p = players[i]
-    local is_me = p and (p.IsLocal or (lp and (p.UserId == lp.UserId or p.Name == lp.Name or (p.Address and lp.Address and p.Address == lp.Address))))
-    if p and not is_me and p.IsValid and p.IsAlive then
-        if cfg.aim_team and is_same_team(p) then goto skip end
-
-        local bone_pos = get_bone_pos(p, cfg.aim_bone)
-        if not bone_pos and cfg.aim_bone == 3 then
-            bone_pos = p.HeadPosition
+    local target
+    if cfg.aim_lock then
+        if not lock_was_down then
+            locked_target = find_best_target()
+            lock_was_down = true
         end
-        if bone_pos then
-            if cfg.aim_vis then
-                if not raycast.IsVisible(cam, bone_pos) then goto skip end
-            end
-            local bx, by, bv = utility.WorldToScreen(bone_pos.X, bone_pos.Y, bone_pos.Z)
-            if bv then
-                local fov = screen_dist(bx, by, scx, scy)
-                if fov < best_fov then
-                    best_fov = fov
-                    best = { player = p, bone_pos = bone_pos }
+        if locked_target then
+            local lt = locked_target
+            if not lt.player or not lt.player.IsValid or not lt.player.IsAlive then
+                locked_target = find_best_target()
+            else
+                local bp = get_player_bone_pos(lt.player, b_mode, scx, scy)
+                if bp then
+                    locked_target.bone_pos = bp
+                else
+                    locked_target = find_best_target()
                 end
             end
         end
-        ::skip::
-    end
-end
-return best
-end
-
-local target
-if cfg.aim_lock then
-if not lock_was_down then
-    locked_target = find_best_target()
-    lock_was_down = true
-end
-if locked_target then
-    local lt = locked_target
-    if not lt.player or not lt.player.IsValid or not lt.player.IsAlive then
-        locked_target = find_best_target()
+        if not locked_target then locked_target = find_best_target() end
+        target = locked_target
     else
-        local bp = get_bone_pos(lt.player, cfg.aim_bone)
-        if not bp and cfg.aim_bone == 3 then bp = lt.player.HeadPosition end
-        if bp then
-            locked_target.bone_pos = bp
-        else
-            locked_target = find_best_target()
+        locked_target = nil
+        lock_was_down = false
+        target = find_best_target()
+    end
+
+    if not target then return end
+    aim_target_ent = target
+
+    local bone_pos = target.bone_pos
+    local p = target.player
+    local ax, ay, az = bone_pos.X, bone_pos.Y, bone_pos.Z
+
+    local dist_studs = dist3(ax, ay, az, cam.X, cam.Y, cam.Z)
+    local dist_m = dist_studs * M_PER_STUD
+
+    local t_flight = 0
+    if cfg.aim_pred then
+        local speed_ms = get_bullet_speed(equipped)
+        local drop_m, tf = calc_ballistic_drop(dist_m, speed_ms)
+        t_flight = tf
+        local drop_studs = (drop_m * (cfg.aim_pred_scale or 1.0)) * STUDS_PER_M
+        ay = ay + drop_studs
+    end
+
+    if cfg.aim_lead and p.Velocity and t_flight > 0 then
+        local v = p.Velocity
+        local vlen = sqrt(v.X*v.X + v.Y*v.Y + v.Z*v.Z)
+        if vlen > 0.5 then
+            ax = ax + v.X * t_flight
+            ay = ay + v.Y * t_flight
+            az = az + v.Z * t_flight
         end
     end
-end
-if not locked_target then locked_target = find_best_target() end
-target = locked_target
-else
-locked_target = nil
-lock_was_down = false
-target = find_best_target()
-end
 
-if not target then return end
-aim_target_ent = target
+    camera.LookAt(ax, ay, az, cfg.aim_sm or 5.0)
 
-local bone_pos = target.bone_pos
-local p = target.player
-local ax, ay, az = bone_pos.X, bone_pos.Y, bone_pos.Z
-
-local dist_studs = dist3(ax, ay, az, cam.X, cam.Y, cam.Z)
-local dist_m = dist_studs * M_PER_STUD
-
-local t_flight = 0
-if cfg.aim_pred then
-local speed_ms = get_bullet_speed(equipped)
-local drop_m, tf = calc_ballistic_drop(dist_m, speed_ms)
-t_flight = tf
-local drop_studs = (drop_m * cfg.aim_pred_scale) * STUDS_PER_M
-ay = ay + drop_studs
-end
-
-if cfg.aim_lead and p.Velocity and t_flight > 0 then
-local v = p.Velocity
-local vlen = sqrt(v.X*v.X + v.Y*v.Y + v.Z*v.Z)
-if vlen > 2 then
-    ax = ax + v.X * t_flight
-    ay = ay + v.Y * t_flight
-    az = az + v.Z * t_flight
-end
-end
-
-camera.LookAt(ax, ay, az, cfg.aim_sm)
+    local sx, sy, on_screen = utility.WorldToScreen(ax, ay, az)
+    if on_screen and input and input.MoveMouse then
+        local sm = cfg.aim_sm or 5.0
+        if sm < 1.0 then sm = 1.0 end
+        local mdx = (sx - scx) / sm
+        local mdy = (sy - scy) / sm
+        if abs(mdx) > 0.5 or abs(mdy) > 0.5 then
+            input.MoveMouse(mdx, mdy)
+        end
+    end
 end
 
 
@@ -2158,7 +2197,7 @@ if cur_ammo and cur_ammo <= 0 then
     return
 end
 
-local mode = cfg.sil_bone or 0
+local mode = opt["b_silent_bone"] or cfg.sil_bone or 0
 local fixed_bone = nil
 if mode == 0 then
     fixed_bone = "Head"
@@ -4052,6 +4091,10 @@ local function set_val(id, val)
     opt[id] = val
     pcall(function() menu.Set(id, val) end)
     if id == "b_aim" then cfg.aim = val
+    elseif id == "b_aim_key" then cfg.aim_key = val
+    elseif id == "b_aim_bone" then cfg.aim_bone = val
+    elseif id == "b_silent_bone" then cfg.sil_bone = val
+    elseif id == "b_npc_aim_bone" then cfg.na_bone = val
     elseif id == "b_aim_fov" then cfg.aim_fov = val
     elseif id == "b_aim_smooth" then cfg.aim_sm = val
     elseif id == "b_aim_pred" then cfg.aim_pred = val
@@ -4384,7 +4427,37 @@ local function draw_menu()
         draw.Text(cx + 10, cy + 3, title, theme_col, 14)
     end
 
-    local function draw_checkbox(x, y, label, key)
+    local function draw_cycle(x, y, w, label, key, options, callback)
+    local cur_idx = opt[key] or 0
+    if cur_idx < 0 or cur_idx >= #options then cur_idx = 0 end
+    local opt_text = options[cur_idx + 1] or options[1] or "Head"
+
+    draw.Text(x, y + 2, label, theme_text, 12)
+
+    local btn_w = 88
+    local btn_h = 20
+    local bx = x + w - btn_w
+    local by = y
+
+    local mx, my = ui.mouse_x or 0, ui.mouse_y or 0
+    local is_hov = mx >= bx and mx <= bx + btn_w and my >= by and my <= by + btn_h
+    local bg_col = is_hov and {0.22, 0.22, 0.28, 0.95} or {0.14, 0.14, 0.18, 0.9}
+
+    draw.RectFilled(bx, by, btn_w, btn_h, bg_col, 4)
+    draw.Rect(bx, by, btn_w, btn_h, is_hov and theme_accent or {0.28, 0.28, 0.36, 0.8}, 1, 4)
+
+    local tw = #opt_text * 6.2
+    local tx = bx + (btn_w - tw) * 0.5
+    draw.Text(tx, by + 4, opt_text, is_hov and theme_accent or theme_text, 11)
+
+    if ui.clicked and is_hov then
+        local next_idx = (cur_idx + 1) % #options
+        set_val(key, next_idx)
+        if callback then callback(next_idx) end
+    end
+end
+
+local function draw_checkbox(x, y, label, key)
         local box_sz = 16
         local hov = mx >= x and mx <= x + 210 and my >= y and my <= y + box_sz + 4
 
@@ -4504,45 +4577,49 @@ local function draw_menu()
     if ui.tab == 0 then
         local col1_x = px + 78
         draw_card(col1_x, py + 30, 236, 481, "Player Aimbot")
-        draw_checkbox(col1_x + 12, py + 60, "Enable Aimbot", "b_aim")
-        draw_slider("s_aim_fov", col1_x + 12, py + 86, 212, "FOV", "b_aim_fov", 30, 800, "%d deg")
-        draw_slider("s_aim_sm", col1_x + 12, py + 124, 212, "Smooth", "b_aim_smooth", 1.0, 20.0, "%.1f")
-        draw_checkbox(col1_x + 12, py + 162, "Bullet Drop Prediction", "b_aim_pred")
-        draw_checkbox(col1_x + 12, py + 188, "Velocity Lead", "b_aim_lead")
-        draw_checkbox(col1_x + 12, py + 214, "Sticky Target Lock", "b_aim_lock")
-        draw_checkbox(col1_x + 12, py + 240, "Visibility Check", "b_aim_vis")
-        draw_checkbox(col1_x + 12, py + 266, "Team Check", "b_aim_team")
-        draw_checkbox(col1_x + 12, py + 292, "Draw FOV Circle", "b_aim_fov_draw")
-        draw_checkbox(col1_x + 12, py + 316, "Filled FOV Circle", "b_aim_fov_filled")
-        draw.Text(col1_x + 12, py + 342, "FOV Color:", theme_sub, 12)
-        draw_color_palette(col1_x + 12, py + 358, 212, "b_aim_fov", function(c)
+        draw_checkbox(col1_x + 12, py + 56, "Enable Aimbot", "b_aim")
+        draw_cycle(col1_x + 12, py + 80, 212, "Aim Key", "b_aim_key", {"Right Click", "Left Click", "Left Alt", "Left Shift", "Auto"})
+        draw_cycle(col1_x + 12, py + 104, 212, "Target Bone", "b_aim_bone", {"Head", "Chest", "Pelvis", "Closest"})
+        draw_slider("s_aim_fov", col1_x + 12, py + 128, 212, "FOV", "b_aim_fov", 30, 800, "%d deg")
+        draw_slider("s_aim_sm", col1_x + 12, py + 166, 212, "Smooth", "b_aim_smooth", 1.0, 20.0, "%.1f")
+        draw_checkbox(col1_x + 12, py + 204, "Bullet Drop Prediction", "b_aim_pred")
+        draw_checkbox(col1_x + 12, py + 228, "Velocity Lead", "b_aim_lead")
+        draw_checkbox(col1_x + 12, py + 252, "Sticky Target Lock", "b_aim_lock")
+        draw_checkbox(col1_x + 12, py + 276, "Visibility Check", "b_aim_vis")
+        draw_checkbox(col1_x + 12, py + 300, "Team Check", "b_aim_team")
+        draw_checkbox(col1_x + 12, py + 324, "Draw FOV Circle", "b_aim_fov_draw")
+        draw_checkbox(col1_x + 12, py + 348, "Filled FOV Circle", "b_aim_fov_filled")
+        draw.Text(col1_x + 12, py + 372, "FOV Color:", theme_sub, 12)
+        draw_color_palette(col1_x + 12, py + 388, 212, "b_aim_fov", function(c)
             cfg.aim_fov_c = c
         end)
 
         local col2_x = px + 322
         draw_card(col2_x, py + 30, 236, 481, "Silent Aim")
-        draw_checkbox(col2_x + 12, py + 60, "Enable Silent Aim", "b_silent")
-        draw_slider("s_sil_fov", col2_x + 12, py + 86, 212, "Silent FOV", "b_silent_fov", 30, 500, "%d deg")
-        draw_checkbox(col2_x + 12, py + 124, "Multi-Point (Bone Fallback)", "b_silent_multipoint")
-        draw_checkbox(col2_x + 12, py + 150, "Visibility Check", "b_silent_vis")
-        draw_checkbox(col2_x + 12, py + 176, "Team Check", "b_silent_team")
-        draw_checkbox(col2_x + 12, py + 202, "Draw Silent FOV", "b_silent_fov_draw")
-        draw_checkbox(col2_x + 12, py + 226, "Filled FOV Circle", "b_silent_fov_filled")
-        draw.Text(col2_x + 12, py + 252, "Silent FOV Color:", theme_sub, 12)
-        draw_color_palette(col2_x + 12, py + 268, 212, "b_silent_fov", function(c)
+        draw_checkbox(col2_x + 12, py + 56, "Enable Silent Aim", "b_silent")
+        draw_cycle(col2_x + 12, py + 80, 212, "Silent Bone", "b_silent_bone", {"Head", "Chest", "Pelvis", "Closest", "Cycle"})
+        draw_slider("s_sil_fov", col2_x + 12, py + 104, 212, "Silent FOV", "b_silent_fov", 30, 500, "%d deg")
+        draw_checkbox(col2_x + 12, py + 142, "Multi-Point (Bone Fallback)", "b_silent_multipoint")
+        draw_checkbox(col2_x + 12, py + 166, "Visibility Check", "b_silent_vis")
+        draw_checkbox(col2_x + 12, py + 190, "Team Check", "b_silent_team")
+        draw_checkbox(col2_x + 12, py + 214, "Draw Silent FOV", "b_silent_fov_draw")
+        draw_checkbox(col2_x + 12, py + 238, "Filled FOV Circle", "b_silent_fov_filled")
+        draw.Text(col2_x + 12, py + 262, "Silent FOV Color:", theme_sub, 12)
+        draw_color_palette(col2_x + 12, py + 278, 212, "b_silent_fov", function(c)
             cfg.sil_fov_c = c
         end)
 
         local col3_x = px + 566
         draw_card(col3_x, py + 30, 240, 481, "NPC Aimbot")
-        draw_checkbox(col3_x + 12, py + 60, "Enable NPC Aimbot", "b_npc_aim")
-        draw_slider("s_na_fov", col3_x + 12, py + 86, 216, "NPC FOV", "b_npc_aim_fov", 30, 500, "%d deg")
-        draw_slider("s_na_sm", col3_x + 12, py + 124, 216, "NPC Smooth", "b_npc_aim_smooth", 1.0, 20.0, "%.1f")
-        draw_checkbox(col3_x + 12, py + 162, "NPC Prediction", "b_npc_aim_pred")
-        draw_checkbox(col3_x + 12, py + 188, "Draw NPC FOV", "b_npc_aim_fov_draw")
-        draw_checkbox(col3_x + 12, py + 212, "Filled FOV Circle", "b_npc_aim_fov_filled")
-        draw.Text(col3_x + 12, py + 238, "NPC FOV Color:", theme_sub, 12)
-        draw_color_palette(col3_x + 12, py + 254, 216, "b_npc_aim_fov", function(c)
+        draw_checkbox(col3_x + 12, py + 56, "Enable NPC Aimbot", "b_npc_aim")
+        draw_cycle(col3_x + 12, py + 80, 216, "NPC Bone", "b_npc_aim_bone", {"Head", "Chest", "Pelvis"})
+        draw_slider("s_na_fov", col3_x + 12, py + 104, 216, "NPC FOV", "b_npc_aim_fov", 30, 500, "%d deg")
+        draw_slider("s_na_sm", col3_x + 12, py + 142, 216, "NPC Smooth", "b_npc_aim_smooth", 1.0, 20.0, "%.1f")
+        draw_checkbox(col3_x + 12, py + 180, "NPC Prediction", "b_npc_aim_pred")
+        draw_checkbox(col3_x + 12, py + 204, "Draw NPC FOV", "b_npc_aim_fov_draw")
+        draw_checkbox(col3_x + 12, py + 228, "Filled FOV Circle", "b_npc_aim_fov_filled")
+        draw.Text(col3_x + 12, py + 252, "NPC FOV Color:", theme_sub, 12)
+        draw_color_palette(col3_x + 12, py + 268, 216, "b_npc_aim_fov", function(c)
             cfg.na_fov_c = c
         end)
 
