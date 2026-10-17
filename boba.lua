@@ -15,7 +15,8 @@ end
 do
 local boba_store = {
     b_aim = false,
-    b_aim_key = 0,
+    b_aim_key = 0x02,
+    b_npc_aim_key = 0x02,
     b_aim_fov = 150,
     b_aim_smooth = 5.0,
     b_aim_bone = 0,
@@ -705,6 +706,7 @@ local function set_val(id, val)
     pcall(function() menu.Set(id, val) end)
     if id == "b_aim" then cfg.aim = val
     elseif id == "b_aim_key" then cfg.aim_key = val
+    elseif id == "b_npc_aim_key" then cfg.npc_aim_key = val
     elseif id == "b_aim_bone" then cfg.aim_bone = val
     elseif id == "b_silent_bone" then cfg.sil_bone = val
     elseif id == "b_npc_aim_bone" then cfg.na_bone = val
@@ -917,7 +919,7 @@ local CFG_IDS = {
 "b_quest","b_quest_range",
 "b_extract","b_extract_range","b_hazard","b_hazard_range",
 "b_nograss",
-"b_aim","b_aim_key","b_aim_fov","b_aim_smooth","b_aim_bone","b_aim_vis_text","b_aim_pred",
+"b_aim","b_aim_key","b_npc_aim_key","b_aim_fov","b_aim_smooth","b_aim_bone","b_aim_vis_text","b_aim_pred",
 "b_aim_lead","b_aim_lock",
 "b_aim_vis","b_aim_team","b_aim_fov_draw","b_aim_fov_filled",
 "b_silent","b_silent_bone","b_silent_vis_text","b_silent_multipoint","b_silent_fov","b_silent_vis","b_silent_team","b_silent_fov_draw","b_silent_fov_filled",
@@ -1809,7 +1811,8 @@ cfg.quest_c   = mc("b_quest", {1, 0.85, 0.2, 1})
 cfg.quest_r   = get_val("b_quest_range", 800) or 800
 
 cfg.aim       = get_val("b_aim", false)
-cfg.aim_key   = get_val("b_aim_key", 0)
+cfg.aim_key   = get_val("b_aim_key", 0x02)
+cfg.npc_aim_key = get_val("b_npc_aim_key", 0x02)
 cfg.aim_fov   = get_val("b_aim_fov", 150)
 cfg.aim_sm    = get_val("b_aim_smooth", 5.0)
 cfg.aim_bone  = get_val("b_aim_bone", 0)
@@ -2566,21 +2569,42 @@ local function run_player_aim()
     local cam = camera.GetPosition()
     if not cam then return end
 
-    local aim_key_mode = get_val("b_aim_key", 0) or 0
-    local key_held = false
-    if aim_key_mode == 0 then
-        key_held = input.IsKeyDown(0x02)
-    elseif aim_key_mode == 1 then
-        key_held = input.IsKeyDown(0x01)
-    elseif aim_key_mode == 2 then
-        key_held = input.IsKeyDown(0x12)
-    elseif aim_key_mode == 3 then
-        key_held = input.IsKeyDown(0xA0)
+    local aim_key_mode = get_val("b_aim_key", 0x02) or 0x02
+    local p_key_held = false
+    if aim_key_mode == 0 or aim_key_mode == 0x02 then
+        p_key_held = input.IsKeyDown(0x02)
+    elseif aim_key_mode == 1 or aim_key_mode == 0x01 then
+        p_key_held = input.IsKeyDown(0x01)
+    elseif aim_key_mode == 2 or aim_key_mode == 0x12 or aim_key_mode == 0xA4 then
+        p_key_held = input.IsKeyDown(0x12) or input.IsKeyDown(0xA4)
+    elseif aim_key_mode == 3 or aim_key_mode == 0x10 or aim_key_mode == 0xA0 then
+        p_key_held = input.IsKeyDown(0x10) or input.IsKeyDown(0xA0)
     elseif aim_key_mode == 4 then
-        key_held = true
+        p_key_held = true
+    elseif aim_key_mode > 4 then
+        p_key_held = input.IsKeyDown(aim_key_mode)
     end
 
-    if not key_held then
+    local npc_key_mode = get_val("b_npc_aim_key", 0x02) or 0x02
+    local npc_key_held = false
+    if npc_key_mode == 0 or npc_key_mode == 0x02 then
+        npc_key_held = input.IsKeyDown(0x02)
+    elseif npc_key_mode == 1 or npc_key_mode == 0x01 then
+        npc_key_held = input.IsKeyDown(0x01)
+    elseif npc_key_mode == 2 or npc_key_mode == 0x12 or npc_key_mode == 0xA4 then
+        npc_key_held = input.IsKeyDown(0x12) or input.IsKeyDown(0xA4)
+    elseif npc_key_mode == 3 or npc_key_mode == 0x10 or npc_key_mode == 0xA0 then
+        npc_key_held = input.IsKeyDown(0x10) or input.IsKeyDown(0xA0)
+    elseif npc_key_mode == 4 then
+        npc_key_held = true
+    elseif npc_key_mode > 4 then
+        npc_key_held = input.IsKeyDown(npc_key_mode)
+    end
+
+    local allow_players = cfg.aim and p_key_held
+    local allow_npcs = cfg.npc_aim and npc_key_held
+
+    if not allow_players and not allow_npcs then
         locked_target = nil
         lock_was_down = false
         return
@@ -2631,7 +2655,7 @@ local function run_player_aim()
         local best_p = nil
         local best_p_fov = cfg.aim_fov or 150
 
-        if cfg.aim then
+        if allow_players then
             local players = frame_players or entity.GetPlayers() or {}
             local rbx_lp = nil
             pcall(function() rbx_lp = game.Players.LocalPlayer end)
@@ -2669,7 +2693,7 @@ local function run_player_aim()
         local best_npc = nil
         local best_npc_fov = cfg.na_fov or 150
 
-        if cfg.npc_aim and world and world.npcs and #world.npcs > 0 then
+        if allow_npcs and world and world.npcs and #world.npcs > 0 then
             for i = 1, #world.npcs do
                 local n = world.npcs[i]
                 if n.hum and n.hum.Health and n.hum.Health > 0 then
@@ -2893,8 +2917,17 @@ local function hsv_to_rgb(h, s, v)
 end
 
 local function get_vk_name(vk)
-    if not vk or vk == 0 then return "Home" end
-    if vk == 0x24 then return "Home"
+    if not vk or vk == 0 or vk == 0x02 then return "Right Click" end
+    if vk == 0x01 or vk == 1 then return "Left Click"
+    elseif vk == 0x04 then return "Middle Click"
+    elseif vk == 0x05 then return "Mouse 4"
+    elseif vk == 0x06 then return "Mouse 5"
+    elseif vk == 0x20 then return "Space"
+    elseif vk == 0x14 then return "Caps"
+    elseif vk == 0x12 or vk == 0xA4 or vk == 2 then return "LAlt"
+    elseif vk == 0x10 or vk == 0xA0 or vk == 3 then return "LShift"
+    elseif vk == 4 then return "Auto"
+    elseif vk == 0x24 then return "Home"
     elseif vk == 0x2D then return "Insert"
     elseif vk == 0x2E then return "Delete"
     elseif vk == 0x23 then return "End"
@@ -4574,6 +4607,8 @@ local ui = {
     drag_oy = 0,
     tab = 0,
     active_slider = nil,
+    active_bind = nil,
+    bind_armed = false,
     binding_key = false,
     last_lmb = false,
     last_toggle_key = false
@@ -4696,35 +4731,63 @@ local function draw_menu()
 
     local cur_toggle_vk = get_val("b_menu_key", 0x24) or 0x24
 
-    if ui.binding_key then
-        local specific_mods = {0xA1, 0xA0, 0xA3, 0xA2, 0xA5, 0xA4}
-        local found_vk = nil
-        for _, mvk in ipairs(specific_mods) do
-            local is_down = input.IsKeyDown(mvk)
-            if is_down and not last_keys[mvk] then
-                found_vk = mvk
-                break
+    if ui.active_bind then
+        if not ui.bind_armed then
+            if not input.IsKeyDown(0x01) and not input.IsKeyDown(0x02) then
+                ui.bind_armed = true
             end
-            last_keys[mvk] = is_down
-        end
-        if not found_vk then
-            for vk = 0x08, 0xFE do
-                if vk ~= 0x01 and vk ~= 0x02 and vk ~= 0x04 and vk ~= 0x10 and vk ~= 0x11 and vk ~= 0x12 then
-                    local is_down = input.IsKeyDown(vk)
-                    if is_down and not last_keys[vk] then
-                        found_vk = vk
+        else
+            if input.IsKeyDown(0x1B) then
+                ui.active_bind = nil
+                ui.bind_armed = false
+            else
+                local found_vk = nil
+                local mouse_vks = {0x02, 0x01, 0x04, 0x05, 0x06}
+                for _, mvk in ipairs(mouse_vks) do
+                    local is_down = input.IsKeyDown(mvk)
+                    if is_down and not last_keys[mvk] then
+                        found_vk = mvk
                         break
                     end
-                    last_keys[vk] = is_down
+                    last_keys[mvk] = is_down
+                end
+                if not found_vk then
+                    local specific_mods = {0xA1, 0xA0, 0xA3, 0xA2, 0xA5, 0xA4, 0x20, 0x09, 0x14}
+                    for _, mvk in ipairs(specific_mods) do
+                        local is_down = input.IsKeyDown(mvk)
+                        if is_down and not last_keys[mvk] then
+                            found_vk = mvk
+                            break
+                        end
+                        last_keys[mvk] = is_down
+                    end
+                end
+                if not found_vk then
+                    for vk = 0x08, 0xFE do
+                        if vk ~= 0x10 and vk ~= 0x11 and vk ~= 0x12 then
+                            local is_down = input.IsKeyDown(vk)
+                            if is_down and not last_keys[vk] then
+                                found_vk = vk
+                                break
+                            end
+                            last_keys[vk] = is_down
+                        end
+                    end
+                end
+                if found_vk then
+                    if ui.active_bind == "aim_key" then
+                        set_val("b_aim_key", found_vk)
+                    elseif ui.active_bind == "npc_aim_key" then
+                        set_val("b_npc_aim_key", found_vk)
+                    elseif ui.active_bind == "menu_key" then
+                        set_val("b_menu_key", found_vk)
+                        cur_toggle_vk = found_vk
+                    end
+                    ui.active_bind = nil
+                    ui.bind_armed = false
+                    last_keys[found_vk] = true
                 end
             end
-        end
-        if found_vk then
-            set_val("b_menu_key", found_vk)
-            cur_toggle_vk = found_vk
-            ui.binding_key = false
-            last_keys[found_vk] = true
-            notify.Success("Menu Key", "Bound to " .. get_vk_name(found_vk), 2)
         end
     end
 
@@ -4863,6 +4926,40 @@ local function draw_menu()
         draw.RectFilled(cx, cy, cw, 22, bar_tint, 0)
         draw.Line(cx, cy + 22, cx + cw, cy + 22, {0.02, 0.02, 0.02, 1.0}, 1.0)
         draw.Text(cx + 10, cy + 3, title, theme_col, 14)
+    end
+
+    local function draw_keybind(x, y, w, label, key, bind_id)
+        local cur_vk = get_val(key, 0x02) or 0x02
+        draw.Text(x, y + 2, label, theme_dim, 13)
+
+        local btn_w = 90
+        local btn_h = 20
+        local bx = x + w - btn_w
+        local by = y
+
+        local is_binding = (ui.active_bind == bind_id)
+        local btn_text = is_binding and "Press..." or ("[ " .. get_vk_name(cur_vk) .. " ]")
+
+        local is_hov = mx >= bx and mx <= bx + btn_w and my >= by and my <= by + btn_h
+        local bg_col = (is_hov or is_binding) and {0.08, 0.08, 0.11, 1.0} or {0.04, 0.04, 0.05, 1.0}
+
+        draw.RectFilled(bx, by, btn_w, btn_h, bg_col, 0)
+        draw.Rect(bx, by, btn_w, btn_h, (is_hov or is_binding) and theme_col or {0.02, 0.02, 0.02, 1.0}, 0, 1.0)
+
+        local tw, _ = draw.GetTextSize(btn_text, 12)
+        tw = (type(tw) == "number" and tw) or (#btn_text * 6.5)
+        local tx = bx + math.floor((btn_w - tw) / 2)
+        draw.Text(tx, by + 3, btn_text, (is_hov or is_binding) and theme_col or theme_sub, 12)
+
+        if is_click and is_hov then
+            if ui.active_bind == bind_id then
+                ui.active_bind = nil
+                ui.bind_armed = false
+            else
+                ui.active_bind = bind_id
+                ui.bind_armed = false
+            end
+        end
     end
 
     local function draw_cycle(x, y, w, label, key, options, callback)
@@ -5018,7 +5115,7 @@ local function draw_checkbox(x, y, label, key)
         local col1_x = px + 78
         draw_card(col1_x, py + 30, 236, 481, "Player Aimbot")
         draw_checkbox(col1_x + 12, py + 56, "Enable Aimbot", "b_aim")
-        draw_cycle(col1_x + 12, py + 80, 212, "Aim Key", "b_aim_key", {"Right Click", "Left Click", "Left Alt", "Left Shift", "Auto"})
+        draw_keybind(col1_x + 12, py + 80, 212, "Aim Key", "b_aim_key", "aim_key")
         draw_cycle(col1_x + 12, py + 104, 212, "Target Bone", "b_aim_bone", {"Head", "Chest", "Pelvis", "Closest"})
         draw_slider("s_aim_fov", col1_x + 12, py + 128, 212, "FOV", "b_aim_fov", 30, 800, "%d deg")
         draw_slider("s_aim_sm", col1_x + 12, py + 166, 212, "Smooth", "b_aim_smooth", 1.0, 20.0, "%.1f")
@@ -5052,14 +5149,15 @@ local function draw_checkbox(x, y, label, key)
         local col3_x = px + 566
         draw_card(col3_x, py + 30, 240, 481, "NPC Aimbot")
         draw_checkbox(col3_x + 12, py + 56, "Enable NPC Aimbot", "b_npc_aim")
-        draw_cycle(col3_x + 12, py + 80, 216, "NPC Bone", "b_npc_aim_bone", {"Head", "Chest", "Pelvis"})
-        draw_slider("s_na_fov", col3_x + 12, py + 104, 216, "NPC FOV", "b_npc_aim_fov", 30, 500, "%d deg")
-        draw_slider("s_na_sm", col3_x + 12, py + 142, 216, "NPC Smooth", "b_npc_aim_smooth", 1.0, 20.0, "%.1f")
-        draw_checkbox(col3_x + 12, py + 180, "NPC Prediction", "b_npc_aim_pred")
-        draw_checkbox(col3_x + 12, py + 204, "Draw NPC FOV", "b_npc_aim_fov_draw")
-        draw_checkbox(col3_x + 12, py + 228, "Filled FOV Circle", "b_npc_aim_fov_filled")
-        draw.Text(col3_x + 12, py + 252, "NPC FOV Color:", theme_sub, 12)
-        draw_color_palette(col3_x + 12, py + 268, 216, "b_npc_aim_fov", function(c)
+        draw_keybind(col3_x + 12, py + 80, 216, "NPC Aim Key", "b_npc_aim_key", "npc_aim_key")
+        draw_cycle(col3_x + 12, py + 104, 216, "NPC Bone", "b_npc_aim_bone", {"Head", "Chest", "Pelvis"})
+        draw_slider("s_na_fov", col3_x + 12, py + 128, 216, "NPC FOV", "b_npc_aim_fov", 30, 500, "%d deg")
+        draw_slider("s_na_sm", col3_x + 12, py + 166, 216, "NPC Smooth", "b_npc_aim_smooth", 1.0, 20.0, "%.1f")
+        draw_checkbox(col3_x + 12, py + 204, "NPC Prediction", "b_npc_aim_pred")
+        draw_checkbox(col3_x + 12, py + 228, "Draw NPC FOV", "b_npc_aim_fov_draw")
+        draw_checkbox(col3_x + 12, py + 252, "Filled FOV Circle", "b_npc_aim_fov_filled")
+        draw.Text(col3_x + 12, py + 276, "NPC FOV Color:", theme_sub, 12)
+        draw_color_palette(col3_x + 12, py + 292, 216, "b_npc_aim_fov", function(c)
             cfg.na_fov_c = c
         end)
 
@@ -5311,9 +5409,16 @@ local function draw_checkbox(x, y, label, key)
         draw_checkbox(col1_x + 183, py + 274, "Rainbow Mode", "b_rainbow_mode")
 
         draw.Text(col1_x + 12, py + 304, "Menu Toggle Key:", theme_sub, 12)
-        local key_btn_text = ui.binding_key and "[Press Any Key...]" or ("Toggle Key: [ " .. get_vk_name(cur_toggle_vk) .. " ]")
+        local is_b_menu = (ui.active_bind == "menu_key")
+        local key_btn_text = is_b_menu and "Press..." or ("Toggle Key: [ " .. get_vk_name(cur_toggle_vk) .. " ]")
         draw_button(col1_x + 12, py + 320, 331, 22, key_btn_text, function()
-            ui.binding_key = not ui.binding_key
+            if ui.active_bind == "menu_key" then
+                ui.active_bind = nil
+                ui.bind_armed = false
+            else
+                ui.active_bind = "menu_key"
+                ui.bind_armed = false
+            end
         end)
 
         draw.Text(col1_x + 12, py + 348, "Menu Theme & Font Color:", theme_sub, 12)
