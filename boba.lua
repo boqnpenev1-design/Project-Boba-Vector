@@ -511,10 +511,7 @@ local MOD_NAMES = {
 }
 
 
-local function mg(id)
-local ok, v = pcall(function() return menu.Get(id) end)
-return ok and v or false
-end
+
 
 local function mc(id)
 local ok, c = pcall(function() return menu.GetColor(id) end)
@@ -1268,11 +1265,11 @@ cfg.quest     = mg("b_quest")
 cfg.quest_c   = mc("b_quest")
 cfg.quest_r   = mg("b_quest_range")
 
-cfg.aim       = mg("b_aim")
-cfg.aim_key   = mg("b_aim_key", 0)
-cfg.aim_fov   = mg("b_aim_fov", 150)
-cfg.aim_sm    = mg("b_aim_smooth", 5.0)
-cfg.aim_bone  = mg("b_aim_bone", 0)
+cfg.aim       = get_val("b_aim", false)
+cfg.aim_key   = get_val("b_aim_key", 0)
+cfg.aim_fov   = get_val("b_aim_fov", 150)
+cfg.aim_sm    = get_val("b_aim_smooth", 5.0)
+cfg.aim_bone  = get_val("b_aim_bone", 0)
 cfg.aim_vis_txt = mg("b_aim_vis_text")
 cfg.aim_pred  = mg("b_aim_pred")
 cfg.aim_pred_scale = 1.0
@@ -1284,11 +1281,11 @@ cfg.aim_draw  = mg("b_aim_fov_draw")
 cfg.aim_fov_filled = mg("b_aim_fov_filled")
 cfg.aim_fov_c = mc("b_aim_fov")
 
-cfg.silent    = mg("b_silent")
-cfg.sil_bone  = mg("b_silent_bone")
-cfg.sil_vis_txt = mg("b_silent_vis_text")
-cfg.sil_multi = mg("b_silent_multipoint")
-cfg.sil_fov   = mg("b_silent_fov")
+cfg.silent    = get_val("b_silent", false)
+cfg.sil_bone  = get_val("b_silent_bone", 0)
+cfg.sil_vis_txt = false
+cfg.sil_multi = get_val("b_silent_multipoint", true)
+cfg.sil_fov   = get_val("b_silent_fov", 200)
 cfg.sil_vis   = mg("b_silent_vis")
 cfg.sil_team  = mg("b_silent_team")
 cfg.sil_draw  = mg("b_silent_fov_draw")
@@ -1897,13 +1894,13 @@ local function run_player_aim()
     end
     local scx, scy = input.GetScreenCenter()
 
-    if cfg.aim and cfg.aim_draw then
+    if cfg.aim_draw then
         local c = cfg.aim_fov_c or {1, 1, 1, 0.25}
         local a = c[4] or 0.25
         if cfg.aim_fov_filled then
-            draw.CircleFilled(scx, scy, cfg.aim_fov or 100, {c[1], c[2], c[3], a * 0.4}, 64)
+            draw.CircleFilled(scx, scy, cfg.aim_fov or 150, {c[1], c[2], c[3], a * 0.4}, 64)
         end
-        draw.Circle(scx, scy, cfg.aim_fov or 100, c, 64)
+        draw.Circle(scx, scy, cfg.aim_fov or 150, c, 64)
     end
 
     local lp = entity.GetLocalPlayer()
@@ -1912,20 +1909,20 @@ local function run_player_aim()
     if not cam then return end
 
     local aim_key_mode = get_val("b_aim_key", 0) or 0
-    local key_active = false
+    local key_held = false
     if aim_key_mode == 0 then
-        key_active = input.IsKeyDown(0x02) or input.IsKeyDown(0x01)
+        key_held = input.IsKeyDown(0x02) or input.IsKeyDown(0x01)
     elseif aim_key_mode == 1 then
-        key_active = input.IsKeyDown(0x01)
+        key_held = input.IsKeyDown(0x01)
     elseif aim_key_mode == 2 then
-        key_active = input.IsKeyDown(0x12)
+        key_held = input.IsKeyDown(0x12)
     elseif aim_key_mode == 3 then
-        key_active = input.IsKeyDown(0xA0)
+        key_held = input.IsKeyDown(0xA0)
     elseif aim_key_mode == 4 then
-        key_active = true
+        key_held = true
     end
 
-    if not key_active then
+    if not key_held then
         locked_target = nil
         lock_was_down = false
         return
@@ -2031,19 +2028,19 @@ local function run_player_aim()
         end
     end
 
+    local sm = cfg.aim_sm or 5.0
+    if sm < 1.0 then sm = 1.0 end
     local sx, sy, on_screen = utility.WorldToScreen(ax, ay, az)
     if on_screen and input and input.MoveMouse then
-        local sm = cfg.aim_sm or 5.0
-        if sm < 1.0 then sm = 1.0 end
         local mdx = (sx - scx) / sm
         local mdy = (sy - scy) / sm
         input.MoveMouse(mdx, mdy)
     end
 
     if target_part then
-        pcall(camera.LookAt, target_part)
+        pcall(camera.LookAt, target_part, sm)
     end
-    pcall(camera.LookAt, ax, ay, az)
+    pcall(camera.LookAt, ax, ay, az, sm)
 end
 
 local function run_npc_aim()
@@ -2113,202 +2110,78 @@ local sil_rot_order = { "Head", "UpperTorso", "LowerTorso" }
 local sil_was_lmb = false
 
 local function run_silent_aim()
-sil_has_visible = false
-if not cfg.silent then
-    if silent_ok then
-        pcall(raycast.ClearSilentTarget)
-        pcall(raycast.DisableSilentHook)
-        silent_ok = false
-    end
-    return
-end
-
-local scx, scy = input.GetScreenCenter()
-if cfg.silent and cfg.sil_draw then
-    local c = cfg.sil_fov_c or {1, 0.8, 0.2, 0.2}
-    local a = c[4] or 0.2
-    if cfg.sil_fov_filled then
-        draw.CircleFilled(scx, scy, cfg.sil_fov or 100, {c[1], c[2], c[3], a * 0.4}, 64)
-    end
-    draw.Circle(scx, scy, cfg.sil_fov or 100, c, 64)
-end
-
-
-
-local is_lmb = input.IsKeyDown(0x01)
-if not is_lmb then
-    if silent_ok then
-        pcall(raycast.ClearSilentTarget)
-        pcall(raycast.DisableSilentHook)
-        silent_ok = false
-    end
-    return
-end
-
-if not silent_ok then
-    local s_ok = raycast.EnableSilentHook()
-    if s_ok then silent_ok = true end
-end
-if not silent_ok then return end
-
-local lp = entity.GetLocalPlayer()
-if not lp then
-    raycast.ClearSilentTarget()
-    return
-end
-
-local origin = camera.GetPosition()
-if not origin then
-    raycast.ClearSilentTarget()
-    return
-end
-local players = frame_players
-if not players then raycast.ClearSilentTarget(); return end
-
-if is_lmb and not sil_was_lmb then
-    sil_rot_idx = (sil_rot_idx % 3) + 1
-end
-sil_was_lmb = is_lmb
-
-local cur_ammo = get_local_ammo()
-if cur_ammo and cur_ammo <= 0 then
-    raycast.ClearSilentTarget()
-    return
-end
-
-local mode = opt["b_silent_bone"] or cfg.sil_bone or 0
-local fixed_bone = nil
-if mode == 0 then
-    fixed_bone = "Head"
-elseif mode == 1 then
-    fixed_bone = "UpperTorso"
-elseif mode == 2 then
-    fixed_bone = "LowerTorso"
-elseif mode == 4 then
-    fixed_bone = sil_rot_order[sil_rot_idx] or "Head"
-end
-
-local best_fov = cfg.sil_fov
-local best_pos = nil
-
-for i = 1, #players do
-local p = players[i]
-local is_me = p and (p.IsLocal or (lp and (p.UserId == lp.UserId or p.Name == lp.Name or (p.Address and lp.Address and p.Address == lp.Address))))
-local is_dead = (p.IsDead == true) or (p.Health ~= nil and p.Health <= 0)
-if p and not is_me and p.IsValid and not is_dead then
-    if cfg.sil_team and is_same_team(p) then goto skip end
-
-    local function get_part_pos(bname)
-        if bname == "Head" then return p.HeadPosition end
-        local char = p.Character
-        if bname == "UpperTorso" or bname == "Chest" then
-            if char then
-                local part = char:FindFirstChild("UpperTorso") or char:FindFirstChild("Torso")
-                if part then return part.Position end
-            end
-            if p.HeadPosition and p.Position then
-                return p.Position + (p.HeadPosition - p.Position) * 0.45
-            end
-            return p.Position
-        elseif bname == "LowerTorso" or bname == "Pelvis" then
-            if char then
-                local part = char:FindFirstChild("LowerTorso") or char:FindFirstChild("HumanoidRootPart")
-                if part then return part.Position end
-            end
-            return p.Position
-        elseif bname == "Feet" or bname == "LeftFoot" or bname == "RightFoot" then
-            if char then
-                local part = char:FindFirstChild("LeftFoot") or char:FindFirstChild("RightFoot") or char:FindFirstChild("Left Leg") or char:FindFirstChild("Right Leg")
-                if part then return part.Position end
-            end
-            if p.Position then
-                return p.Position - Vector3.New(0, 2.5, 0)
-            end
+    if not cfg.silent then
+        if silent_ok then
+            pcall(raycast.ClearSilentTarget)
+            pcall(raycast.DisableSilentHook)
+            silent_ok = false
         end
-        if char then
-            local part = char:FindFirstChild(bname)
-            if part then return part.Position end
-        end
-        return p.Position or p.HeadPosition
+        return
     end
 
-    local target_bone = fixed_bone
-    if mode == 3 then
-        local h_pos = p.HeadPosition
-        local c_pos = get_part_pos("UpperTorso")
-        local pel_pos = get_part_pos("LowerTorso")
-        local lf_pos = get_part_pos("Feet")
+    if not silent_ok then
+        local s_ok = raycast.EnableSilentHook()
+        if s_ok then silent_ok = true end
+    end
+    if not silent_ok then return end
 
-        local d_head = huge
-        local d_chest = huge
-        local d_pelvis = huge
-
-        if h_pos then
-            local sx, sy, sv = utility.WorldToScreen(h_pos.X, h_pos.Y, h_pos.Z)
-            if sv then d_head = screen_dist(sx, sy, scx, scy) end
+    local scx, scy = input.GetScreenCenter()
+    if cfg.sil_draw then
+        local c = cfg.sil_fov_c or {1, 0.8, 0.2, 0.2}
+        local a = c[4] or 0.2
+        if cfg.sil_fov_filled then
+            draw.CircleFilled(scx, scy, cfg.sil_fov or 200, {c[1], c[2], c[3], a * 0.4}, 64)
         end
-        if c_pos then
-            local sx, sy, sv = utility.WorldToScreen(c_pos.X, c_pos.Y, c_pos.Z)
-            if sv then d_chest = screen_dist(sx, sy, scx, scy) end
-        end
-        if pel_pos then
-            local sx, sy, sv = utility.WorldToScreen(pel_pos.X, pel_pos.Y, pel_pos.Z)
-            if sv then d_pelvis = screen_dist(sx, sy, scx, scy) end
-        end
-        if lf_pos then
-            local sx, sy, sv = utility.WorldToScreen(lf_pos.X, lf_pos.Y, lf_pos.Z)
-            if sv then
-                local d = screen_dist(sx, sy, scx, scy)
-                if d < d_pelvis then d_pelvis = d end
-            end
-        end
-
-        if d_head <= d_chest and d_head <= d_pelvis then
-            target_bone = "Head"
-        elseif d_chest <= d_head and d_chest <= d_pelvis then
-            target_bone = "UpperTorso"
-        else
-            target_bone = "LowerTorso"
-        end
+        draw.Circle(scx, scy, cfg.sil_fov or 200, c, 64)
     end
 
-    local bone_pos = get_part_pos(target_bone)
+    local lp = entity.GetLocalPlayer()
+    if not lp then
+        raycast.ClearSilentTarget()
+        return
+    end
 
-    if not bone_pos and cfg.sil_multi then
-        local fallback_bones = { "Head", "UpperTorso", "LowerTorso" }
-        for bi = 1, #fallback_bones do
-            local fb_name = fallback_bones[bi]
-            if fb_name ~= target_bone then
-                local fb_pos = get_part_pos(fb_name)
-                if fb_pos then
-                    bone_pos = fb_pos
-                    break
+    local origin = lp.HeadPosition or camera.GetPosition()
+    if not origin then
+        raycast.ClearSilentTarget()
+        return
+    end
+
+    local players = frame_players or entity.GetPlayers() or {}
+    local mode = get_val("b_silent_bone", 0) or 0
+    local best_fov = cfg.sil_fov or 200
+    local best_pos = nil
+
+    for i = 1, #players do
+        local p = players[i]
+        local is_me = p and (p.IsLocal or (lp and (p.UserId == lp.UserId or p.Name == lp.Name or (p.Address and lp.Address and p.Address == lp.Address))))
+        if p and not is_me then
+            local is_dead = (p.IsDead == true) or (p.Health ~= nil and p.Health <= 0)
+            if not is_dead then
+                if cfg.sil_team and is_same_team(p) then goto skip end
+
+                local bone_pos = get_player_bone_pos(p, mode == 4 and (sil_rot_idx - 1) or mode, scx, scy)
+                if bone_pos then
+                    local bx, by, bv = utility.WorldToScreen(bone_pos.X, bone_pos.Y, bone_pos.Z)
+                    if bv then
+                        local fov = screen_dist(bx, by, scx, scy)
+                        if fov < best_fov then
+                            best_fov = fov
+                            best_pos = bone_pos
+                        end
+                    end
                 end
             end
+            ::skip::
         end
     end
 
-    if bone_pos then
-        local sx, sy, sv = utility.WorldToScreen(
-            bone_pos.X, bone_pos.Y, bone_pos.Z)
-        if sv then
-            local fov = screen_dist(sx, sy, scx, scy)
-            if fov < best_fov then
-                best_fov = fov
-                best_pos = bone_pos
-            end
-        end
+    if best_pos then
+        local dir = best_pos - origin
+        raycast.SetSilentTarget(origin, dir)
+    else
+        raycast.ClearSilentTarget()
     end
-    ::skip::
-end
-end
-
-if best_pos then
-local dir = best_pos - origin
-raycast.SetSilentTarget(origin, dir)
-else
-raycast.ClearSilentTarget()
-end
 end
 
 
