@@ -1093,9 +1093,12 @@ local function scan_npcs()
     local result = {}
     local ws = game.Workspace
     if not ws then world.npcs = result; return end
+
     local pnames = {}
+    local p_chars = {}
     for _, p in ipairs(entity.GetPlayers()) do
         if p.Name and p.Name ~= "" then pnames[p.Name] = true end
+        if p.Character then p_chars[p.Character] = true end
     end
     local lp = entity.GetLocalPlayer()
     if lp and lp.Name and lp.Name ~= "" then pnames[lp.Name] = true end
@@ -1103,13 +1106,14 @@ local function scan_npcs()
     pcall(function() rbx_lp = game.Players.LocalPlayer end)
     if rbx_lp and rbx_lp.Name and rbx_lp.Name ~= "" then pnames[rbx_lp.Name] = true end
     local lp_char = (lp and lp.Character) or (rbx_lp and rbx_lp.Character)
+    if lp_char then p_chars[lp_char] = true end
 
     local cam = camera.GetPosition()
     local cx, cy, cz = cam and cam.X or 0, cam and cam.Y or 0, cam and cam.Z or 0
 
     local function is_player_model(npc)
         if not npc then return true end
-        if lp_char and npc == lp_char then return true end
+        if p_chars[npc] then return true end
         if pnames[npc.Name] then return true end
         local rbx_plr = false
         pcall(function()
@@ -1119,21 +1123,17 @@ local function scan_npcs()
                 end
             end
         end)
-        if rbx_plr then return true end
-        for _, pl in ipairs(entity.GetPlayers()) do
-            if pl.Character and pl.Character == npc then return true end
-        end
-        return false
+        return rbx_plr
     end
 
     local function process(npc)
-        if npc.ClassName ~= "Model" then return end
-        if is_player_model(npc) then return end
+        if not npc or npc.ClassName ~= "Model" then return end
         if CONTAINER_NAMES and CONTAINER_NAMES[npc.Name] then return end
         local hum = npc:FindFirstChildOfClass("Humanoid")
         if not hum then return end
         local hp = hum.Health
         if not hp or hp <= 0 then return end
+        if is_player_model(npc) then return end
         local head = npc:FindFirstChild("Head") or npc:FindFirstChild("HeadTopHitBox")
         local root = npc:FindFirstChild("HumanoidRootPart") or npc:FindFirstChild("Torso") or head
         if not head and not root then return end
@@ -1156,6 +1156,7 @@ local function scan_npcs()
     end
 
     local function walk(folder)
+        if not folder then return end
         local ch = folder:GetChildren()
         for i = 1, #ch do
             local c = ch[i]
@@ -1164,18 +1165,16 @@ local function scan_npcs()
         end
     end
 
-    local zones = { "AiZones", "AIZones", "NPCs", "AI", "Enemies", "SpawnerZones" }
+    local zones = { "AiZones", "AIZones", "NPCs", "AI", "Enemies", "SpawnerZones", "SafeZone", "Safezone", "Traders", "Trader", "Characters", "Living" }
     for zi = 1, #zones do
         local z = ws:FindFirstChild(zones[zi])
         if z then walk(z) end
     end
 
-    local ch = ws:GetChildren()
-    for i = 1, #ch do
-        local c = ch[i]
-        if c.ClassName == "Model" and not is_player_model(c) then
-            process(c)
-        end
+    local direct_traders = { "Nurse", "Seryozha", "Anna", "Blaze", "Tarmo", "Bartender", "Mechanic", "Doctor", "Medic", "Trader", "ScavKing", "Anton", "Dozer", "Whisper", "Death" }
+    for ti = 1, #direct_traders do
+        local m = ws:FindFirstChild(direct_traders[ti])
+        if m and m.ClassName == "Model" then process(m) end
     end
 
     world.npcs = result
@@ -1326,13 +1325,14 @@ world.players = result
 end
 
 local function scan_extracts()
+if world.extracts and #world.extracts > 0 then return end
 local result = {}
 local ws = game.Workspace
 if not ws then world.extracts = result; return end
 
 local seen = {}
 local function try_add(obj)
-    if seen[obj] then return end
+    if not obj or seen[obj] then return end
     seen[obj] = true
     local part
     if obj:IsA("BasePart") then
@@ -1385,22 +1385,6 @@ if map then
     for i = 1, #mch do
         if name_is_extract(mch[i].Name) then
             try_add(mch[i])
-        end
-    end
-end
-
-local ch = ws:GetChildren()
-for i = 1, #ch do
-    local c = ch[i]
-    if name_is_extract(c.Name) then
-        try_add(c)
-    end
-    if c.ClassName == "Folder" or c.ClassName == "Model" then
-        local sub = c:GetChildren()
-        for j = 1, #sub do
-            if name_is_extract(sub[j].Name) then
-                try_add(sub[j])
-            end
         end
     end
 end
@@ -5052,10 +5036,6 @@ pcall(auto_apply_skins)
 
 frame_players = entity.GetPlayers() or {}
 
-if cfg.nograss then
-    terrain.SetGrassLength(0)
-end
-
 pcall(draw_player_esp)
 pcall(draw_npc_esp)
 pcall(draw_world_esp)
@@ -5087,19 +5067,19 @@ _G.onFrame = _G.on_frame
 thread.Create(scan_containers, 15000)
 thread.Create(scan_world_items, 10000)
 thread.Create(scan_quests, 20000)
-thread.Create(scan_npcs, 1500)
-thread.Create(scan_players, 3000)
+thread.Create(scan_npcs, 3500)
+thread.Create(scan_players, 5000)
 thread.Create(scan_extracts, 30000)
 thread.Create(scan_hazards, 20000)
 thread.Create(scan_claymores, 10000)
-thread.Create(scan_cars, 8000)
+thread.Create(scan_cars, 10000)
 
-thread.Create(apply_world_mods, 3000)
+thread.Create(apply_world_mods, 5000)
 
-thread.Create(update_bosses, 500)
-thread.Create(update_mod_check, 1000)
-thread.Create(slf_scan, 500)
-thread.Create(cache_cfg, 200)
+thread.Create(update_bosses, 2500)
+thread.Create(update_mod_check, 2500)
+thread.Create(slf_scan, 3000)
+thread.Create(cache_cfg, 1500)
 
 
 OnPlayerAdded = function(player)
@@ -5110,7 +5090,7 @@ end
 
 silent_ok = false
 
-thread.Create(flush_diag, 3000)
+
 
 
 
