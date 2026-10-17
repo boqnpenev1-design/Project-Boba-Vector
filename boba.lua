@@ -67,6 +67,11 @@ local boba_store = {
     b_esp_hvt = false,
     b_esp_vis_tag = false,
 
+    b_loadout_esp = false,
+    b_loadout_sz = 38,
+    b_loadout_x = 420,
+    b_loadout_y = 120,
+
     b_chams = false,
     b_chams_mode = 0,
     b_chams_vc = false,
@@ -752,6 +757,10 @@ local function set_val(id, val)
     elseif id == "b_esp_snap" then cfg.esp_snap = val
     elseif id == "b_esp_range" then cfg.esp_range = val
     elseif id == "b_esp_vis_tag" then cfg.esp_vis_tag = val
+    elseif id == "b_loadout_esp" then cfg.loadout_esp = val
+    elseif id == "b_loadout_sz" then cfg.loadout_sz = val
+    elseif id == "b_loadout_x" then cfg.loadout_x = val
+    elseif id == "b_loadout_y" then cfg.loadout_y = val
     elseif id == "b_chams" then cfg.chams = val
     elseif id == "b_chams_vc" then cfg.chams_vis = val
     elseif id == "b_npc" then cfg.npc = val
@@ -910,7 +919,7 @@ end
 local CFG_IDS = {
 "b_esp","b_esp_style","b_esp_box","b_esp_skel","b_esp_hp","b_esp_hp_txt",
 "b_esp_name","b_esp_dist","b_esp_weapon","b_esp_snap","b_esp_range","b_esp_team",
-"b_esp_staff","b_esp_armor","b_esp_hvt","b_esp_vis_tag",
+"b_esp_staff","b_esp_armor","b_esp_hvt","b_esp_vis_tag","b_loadout_esp","b_loadout_sz","b_loadout_x","b_loadout_y",
 "b_chams","b_chams_mode","b_chams_vc","b_wep_chams","b_wep_chams_style","b_wep_chams_pulse",
 "b_npc","b_npc_box","b_npc_hp","b_npc_name","b_npc_dist","b_npc_skel","b_npc_range",
 "b_cont","b_cont_items","b_cont_filter","b_cont_range",
@@ -1772,6 +1781,10 @@ cfg.esp_armor = mg("b_esp_armor")
 cfg.esp_hvt   = mg("b_esp_hvt")
 cfg.esp_hvt_c = mc("b_esp_hvt")
 cfg.esp_vis_tag = mg("b_esp_vis_tag")
+cfg.loadout_esp = mg("b_loadout_esp")
+cfg.loadout_sz  = mg("b_loadout_sz") or 38
+cfg.loadout_x   = mg("b_loadout_x") or 420
+cfg.loadout_y   = mg("b_loadout_y") or 120
 
 cfg.chams     = mg("b_chams")
 cfg.chams_m   = mg("b_chams_mode") or 0
@@ -4598,8 +4611,10 @@ local draw_nixware_menu
 do
 local ui = {
     visible = true,
-    x = 100,
-    y = 60,
+    centered = false,
+    user_dragged = false,
+    x = 551,
+    y = 280,
     w = 818,
     h = 520,
     dragging = false,
@@ -4665,6 +4680,19 @@ end)
 local function draw_menu()
     boba_menu_open = ui.visible
     local now_t = tick()
+
+    if not ui.centered then
+        local scx, scy = input.GetScreenCenter()
+        if not scx or scx <= 0 then
+            local sw, sh = utility.GetScreenSize()
+            if sw and sw > 0 then scx = sw * 0.5; scy = sh * 0.5 end
+        end
+        if scx and scy and scx > 0 and scy > 0 then
+            ui.x = math.max(10, math.floor(scx - ui.w * 0.5))
+            ui.y = math.max(10, math.floor(scy - ui.h * 0.5))
+            ui.centered = true
+        end
+    end
 
     if not intro_done then
         local el = now_t - intro_start
@@ -4798,6 +4826,17 @@ local function draw_menu()
     if toggle_down and not ui.last_toggle_key then
         ui.visible = not ui.visible
         boba_menu_open = ui.visible
+        if ui.visible and not ui.user_dragged then
+            local scx, scy = input.GetScreenCenter()
+            if not scx or scx <= 0 then
+                local sw, sh = utility.GetScreenSize()
+                if sw and sw > 0 then scx = sw * 0.5; scy = sh * 0.5 end
+            end
+            if scx and scy and scx > 0 and scy > 0 then
+                ui.x = math.max(10, math.floor(scx - ui.w * 0.5))
+                ui.y = math.max(10, math.floor(scy - ui.h * 0.5))
+            end
+        end
     end
     ui.last_toggle_key = toggle_down
 
@@ -4843,13 +4882,14 @@ local function draw_menu()
         end)
     end
 
-    local title_h = 21
+    local title_h = 28
     local px = ui.x
     local py = ui.y
 
     if is_click then
         if mx >= px and mx <= px + ui.w and my >= py and my <= py + title_h then
             ui.dragging = true
+            ui.user_dragged = true
             ui.drag_ox = mx - px
             ui.drag_oy = my - py
         end
@@ -5171,13 +5211,15 @@ local function draw_checkbox(x, y, label, key)
         draw_checkbox(col1_x + 12, py + 164, "Name ESP", "b_esp_name")
         draw_checkbox(col1_x + 12, py + 190, "Distance ESP", "b_esp_dist")
         draw_checkbox(col1_x + 12, py + 216, "Weapon ESP", "b_esp_weapon")
-        draw_checkbox(col1_x + 12, py + 242, "Snaplines", "b_esp_snap")
-        draw_slider("s_esp_r", col1_x + 12, py + 270, 212, "Player Range (m)", "b_esp_range", 50, 5000, "%d m")
+        draw_checkbox(col1_x + 12, py + 228, "Snaplines", "b_esp_snap")
+        draw_checkbox(col1_x + 12, py + 252, "Player Loadout ESP", "b_loadout_esp")
+        draw_slider("s_loadout_sz", col1_x + 12, py + 278, 212, "Loadout Size (px)", "b_loadout_sz", 24, 56, "%d px")
+        draw_slider("s_esp_r", col1_x + 12, py + 318, 212, "Player Range (m)", "b_esp_range", 50, 5000, "%d m")
 
-        draw.Text(col1_x + 12, py + 312, "Box Color:", theme_sub, 12)
-        draw_color_palette(col1_x + 12, py + 328, 212, "b_esp_box", nil)
-        draw.Text(col1_x + 12, py + 370, "Snapline Color:", theme_sub, 12)
-        draw_color_palette(col1_x + 12, py + 386, 212, "b_esp_snap", nil)
+        draw.Text(col1_x + 12, py + 360, "Box Color:", theme_sub, 12)
+        draw_color_palette(col1_x + 12, py + 376, 212, "b_esp_box", nil)
+        draw.Text(col1_x + 12, py + 418, "Snapline Color:", theme_sub, 12)
+        draw_color_palette(col1_x + 12, py + 434, 212, "b_esp_snap", nil)
 
         local col2_x = px + 322
         draw_card(col2_x, py + 30, 236, 481, "NPC & Extraction")
@@ -5494,6 +5536,691 @@ end
 draw_nixware_menu = draw_menu
 end
 
+local draw_player_loadout
+do
+    local loadout_ui = {
+        x = 420,
+        y = 120,
+        dragging = false,
+        drag_ox = 0,
+        drag_oy = 0,
+        last_lmb = false,
+        initialized = false
+    }
+
+    local img_cache = {}
+
+    local KNOWN_IMAGES = {
+        ["ai2"]=true, ["aa2"]=true, ["mikeshades"]=true, ["f1"]=true, ["bandage"]=true, ["wounddressing"]=true, ["scythe"]=true, ["ghillietorso"]=true, ["ghillielegs"]=true, ["ghilliehood"]=true, ["map"]=true, ["pathfinder"]=true, ["dagr"]=true, ["keychain"]=true, ["lighter"]=true, ["maxenergy"]=true, ["chocolatebar"]=true, ["bluecard"]=true, ["orangecard"]=true, ["serumred"]=true, ["serumgreen"]=true, ["serumyellow"]=true, ["serumpurple"]=true, ["6b2"]=true, ["6b23"]=true, ["6b27"]=true, ["6b45"]=true, ["6b47"]=true, ["6b5"]=true,
+        adar15=true, akm=true, akmn=true, altyn=true, anarchytomahawk=true, asval=true, attak5=true,
+        balaclava=true, bandolier=true, combatgloves=true, concealedvest=true, crown=true, cutlass=true,
+        dozer=true, dragonslayer=true, dv2=true, fal=true, fastmt=true, goldmakarov=true, gp5=true,
+        gp7=true, groza=true, handwraps=true, headmount=true, hspv=true, iceaxe=true, icedagger=true,
+        improvedouter=true, improvedouterlower=true, izh12=true, izh81=true, jpc=true, karambit=true,
+        kneepads=true, korakulon=true, longsword=true, m4=true, machete=true, makarov=true, mk23=true,
+        mosin=true, motorcycle=true, mp443=true, mp5sd=true, onestrap=true, pantsir3=true, pkm=true,
+        plasmaninjato=true, ppsh41=true, r700=true, rpg7=true, saiga=true, scavking=true, sks=true,
+        smersh=true, specops=true, ssh68=true, svd=true, tanker=true, tfz0=true, tfz98=true, tors=true,
+        tortilla=true, toz106=true, tt33=true, unohelmet=true, unovest=true, vz61=true,
+        wastelandbackpack=true, zsh=true
+    }
+
+    local ALIASES = {
+        m4a1 = "m4",
+        goldenmakarov = "goldmakarov",
+        gold_makarov = "goldmakarov",
+        lynx = "attak5",
+        as_val = "asval",
+        val = "asval",
+        fast_mt = "fastmt",
+        fast = "fastmt",
+        ssh_68 = "ssh68",
+        ssh = "ssh68",
+        kora_kulon = "korakulon",
+        kora = "korakulon",
+        pantsir = "pantsir3",
+        scav_king = "scavking",
+        spec_ops = "specops",
+        specopsbackpack = "specops",
+        uno_vest = "unovest",
+        uno_helmet = "unohelmet",
+        concealed_vest = "concealedvest",
+        improved_outer = "improvedouter",
+        combat_gloves = "combatgloves",
+        combatglove = "combatgloves",
+        gloves = "combatgloves",
+        glove = "combatgloves",
+        comba = "combatgloves",
+        hand_wraps = "handwraps",
+        kneepad = "kneepads",
+        kneep = "kneepads",
+        knee = "kneepads",
+        legarmor = "kneepads",
+        leg_armor = "kneepads",
+        legar = "kneepads",
+        balac = "balaclava",
+        sewnmask = "balaclava", mikes = "mikeshades", mikeshade = "mikeshades", shades = "mikeshades", glasses = "mikeshades", sunglasses = "mikeshades", medkit = "ai2", bandage = "bandage", wounddressing = "bandage", wound = "bandage",
+        sewn_mask = "balaclava",
+        sewn = "balaclava",
+        gasmask = "gp5",
+        gas_mask = "gp5",
+        ["6b43"] = "6b45",
+        summershirt = "improvedouter",
+        wastelandshirt = "improvedouter",
+        camoshirt = "improvedouter",
+        camo_shirt = "improvedouter",
+        camos = "improvedouter",
+        civilianshirt = "improvedouter",
+        civilian_shirt = "improvedouter",
+        civilians = "improvedouter",
+        shirt = "improvedouter",
+        tshirt = "improvedouter",
+        summerpants = "improvedouterlower",
+        wastelandpants = "improvedouterlower",
+        camopants = "improvedouterlower",
+        camo_pants = "improvedouterlower",
+        camop = "improvedouterlower",
+        civilianpants = "improvedouterlower",
+        civilian_pants = "improvedouterlower",
+        civilianp = "improvedouterlower",
+        pants = "improvedouterlower",
+        trousers = "improvedouterlower",
+        attack5 = "attak5",
+        attack = "attak5",
+        sportbag = "onestrap",
+        sport_bag = "onestrap",
+        anarchy_tomahawk = "anarchytomahawk",
+        dragon_slayer = "dragonslayer",
+        ice_axe = "iceaxe",
+        ice_dagger = "icedagger",
+        plasma_ninjato = "plasmaninjato",
+        wasteland_backpack = "wastelandbackpack",
+        one_strap = "onestrap",
+        nagantrevolver = "makarov",
+        nagant = "makarov",
+        tt = "tt33",
+        mp443grach = "mp443",
+        grach = "mp443",
+        kulon = "korakulon",
+        kora = "korakulon",
+        gorkashirt = "improvedouter",
+        gorkapants = "improvedouterlower",
+        vamphshirt = "improvedouter",
+        vamphpants = "improvedouterlower",
+        kgbbag = "onestrap",
+        medbag = "onestrap",
+        satchelbag = "onestrap",
+        ["6b5liquidator"] = "6b5",
+        dozerarmor = "dozer",
+        scavkingvest = "scavking",
+        scavkinghelmet = "scavking",
+        motorcyclehelmet = "motorcycle",
+        maskavisor = "altyn",
+        altynvisor = "altyn",
+        dv = "dv2",
+        dagr = "dagr",
+        knife = "dv2",
+        bayonet = "dv2",
+        izh = "izh81",
+        saiga12 = "saiga",
+        ppsh = "ppsh41",
+        toz = "toz106",
+        vss = "asval",
+        scar = "m4",
+        ak74 = "akm",
+        ak74m = "akm",
+        ak = "akm",
+        vest = "concealedvest",
+        chestrig = "concealedvest",
+        bag = "onestrap",
+        backpack = "wastelandbackpack",
+        helmet = "ssh68",
+        headwear = "ssh68",
+        mask = "balaclava",
+        armor = "6b2",
+        pm = "makarov",
+        ["a12"] = "ai2",
+        ["a1-2"] = "ai2",
+        ["ai-2"] = "ai2",
+        ["f1grenade"] = "f1",
+        ["f-1"] = "f1",
+        ["sychte"] = "scythe",
+        ["tomahawk"] = "anarchytomahawk",
+        ["bando"] = "bandolier",
+        ["bandolierchestrig"] = "bandolier",
+        ["ghillieshirt"] = "ghillietorso",
+        ["ghilliepants"] = "ghillielegs",
+        ["ghilliesuit"] = "ghillietorso",
+        ["compass"] = "pathfinder",
+        ["estonian"] = "map",
+        ["estonianbordermap"] = "map",
+        ["zippo"] = "lighter",
+        ["maxenergy"] = "maxenergy",
+        ["max_energy"] = "maxenergy",
+        ["chocolate"] = "chocolatebar",
+        ["choc"] = "chocolatebar",
+        ["blue_card"] = "bluecard",
+        ["kgb3"] = "bluecard",
+        ["cardblue"] = "bluecard",
+        ["orange_card"] = "orangecard",
+        ["kgb5"] = "orangecard",
+        ["cardorange"] = "orangecard",
+        ["serumxred"] = "serumred",
+        ["redserum"] = "serumred",
+        ["serumxgreen"] = "serumgreen",
+        ["greenserum"] = "serumgreen",
+        ["serumxyellow"] = "serumyellow",
+        ["yellowserum"] = "serumyellow",
+        ["serumxpurple"] = "serumpurple",
+        ["purpleserum"] = "serumpurple"
+    }
+
+    local PISTOLS = {
+        makarov = true, goldmakarov = true, goldenmakarov = true,
+        mk23 = true, mp443 = true, tt33 = true, nagantrevolver = true, nagant = true
+    }
+
+    local function resolve_icon_name(raw_name)
+        if not raw_name or type(raw_name) ~= "string" or raw_name == "" then return nil end
+        local k = raw_name:lower():gsub("[%s%-_]", "")
+        if KNOWN_IMAGES[k] then return k end
+        if ALIASES[k] then return ALIASES[k] end
+        for kn in pairs(KNOWN_IMAGES) do
+            if k:find(kn, 1, true) then return kn end
+        end
+        for ak, av in pairs(ALIASES) do
+            if k:find(ak, 1, true) then return av end
+        end
+        return nil
+    end
+
+    local img_log_count = 0
+    local function boba_log_img(str)
+        if img_log_count > 80 then return end
+        img_log_count = img_log_count + 1
+        pcall(function()
+            local folder = get_cfg_folder()
+            local f = io.open(folder .. "boba_image_log.txt", "a")
+            if f then
+                f:write(string.format("[%.2f] %s", tick(), str) .. string.char(10))
+                f:close()
+            end
+        end)
+    end
+
+    pcall(function()
+        local folder = get_cfg_folder()
+        local f = io.open(folder .. "boba_image_log.txt", "w")
+        if f then
+            f:write("=== BOBA IMAGE LOG START ===" .. string.char(10))
+            local dl = (type(draw) == "table" and type(draw.LoadImage)) or "nil"
+            f:write("draw.LoadImage type: " .. tostring(dl) .. string.char(10))
+            f:close()
+        end
+    end)
+
+    local img_rev = tostring(math.floor(tick()))
+    local img_handles = {}
+
+    local function get_icon(name)
+        local icon_name = resolve_icon_name(name)
+        if not icon_name then return nil end
+        local h = img_handles[icon_name]
+        if h then
+            return h
+        end
+        local url = "http://127.0.0.1:28751/" .. icon_name .. ".png?rev=" .. img_rev
+        local ok, ret = pcall(draw.LoadImage, url)
+        if ok and ret then
+            img_handles[icon_name] = ret
+            return ret
+        end
+        local fb_url = "https://raw.githubusercontent.com/ericpavva/delta-itemss/main/" .. icon_name .. ".png?rev=" .. img_rev
+        local ok2, ret2 = pcall(draw.LoadImage, fb_url)
+        if ok2 and ret2 then
+            img_handles[icon_name] = ret2
+            return ret2
+        end
+        return nil
+    end
+
+    pcall(function()
+        for kn in pairs(KNOWN_IMAGES) do
+            get_icon(kn)
+        end
+    end)
+
+    local function get_inst_name(val)
+        if not val then return nil end
+        if type(val) == "userdata" then
+            local ok, nm = pcall(function() return val.Name end)
+            if ok and nm and nm ~= "" then return nm end
+        elseif type(val) == "string" and val ~= "" then
+            return val
+        end
+        return nil
+    end
+
+    local function resolve_target_name(wp)
+        if not wp then return "Player" end
+        if type(wp.display) == "string" and wp.display ~= "" and wp.display ~= "Unknown" then
+            return wp.display
+        end
+        if type(wp.name) == "string" and wp.name ~= "" and wp.name ~= "Unknown" then
+            return wp.name
+        end
+        local ent = wp.entity
+        if ent then
+            if type(ent.DisplayName) == "string" and ent.DisplayName ~= "" then
+                return ent.DisplayName
+            end
+            if type(ent.Name) == "string" and ent.Name ~= "" then
+                return ent.Name
+            end
+            if ent.Character and type(ent.Character.Name) == "string" and ent.Character.Name ~= "" and ent.Character.Name ~= "Character" then
+                return ent.Character.Name
+            end
+            local ok, nm = pcall(function()
+                if ent.Character then
+                    local pl = game.Players:GetPlayerFromCharacter(ent.Character)
+                    if pl and pl.DisplayName and pl.DisplayName ~= "" then
+                        return pl.DisplayName
+                    elseif pl and pl.Name and pl.Name ~= "" then
+                        return pl.Name
+                    end
+                end
+            end)
+            if ok and nm and nm ~= "" then return nm end
+        end
+        return "Player"
+    end
+
+    local function find_best_target()
+        local scx, scy = input.GetScreenCenter()
+        local best_p = nil
+        local best_fov = 999999
+
+        if inv_target_data and inv_target_data.entity and inv_target_data.entity.IsValid and inv_target_data.entity.IsAlive then
+            local p = inv_target_data.entity
+            local pos = p.Position
+            if p.Character then
+                local h = p.Character:FindFirstChild("Head") or p.Character:FindFirstChild("HumanoidRootPart")
+                if h and h.Position then pos = h.Position end
+            end
+            if pos then
+                local sx, sy, on_scr = utility.WorldToScreen(pos.X, pos.Y, pos.Z)
+                if on_scr and screen_dist(sx, sy, scx, scy) < 320 then
+                    return inv_target_data
+                end
+            end
+        end
+
+        if not world or not world.players or #world.players == 0 then return nil end
+        local lp = entity.GetLocalPlayer()
+        local lp_name = lp and lp.Name or ""
+
+        for i = 1, #world.players do
+            local wp = world.players[i]
+            local p = wp and wp.entity
+            if p and p.IsValid and p.IsAlive and not p.IsLocal and not (p.Health and p.Health <= 0) then
+                if wp.name ~= lp_name then
+                    local pos = p.Position
+                    if p.Character then
+                        local h = p.Character:FindFirstChild("Head") or p.Character:FindFirstChild("HumanoidRootPart")
+                        if h and h.Position then pos = h.Position end
+                    end
+                    if pos then
+                        local sx, sy, on_scr = utility.WorldToScreen(pos.X, pos.Y, pos.Z)
+                        if on_scr then
+                            local d = screen_dist(sx, sy, scx, scy)
+                            if d < best_fov then
+                                best_fov = d
+                                best_p = wp
+                            end
+                        end
+                    end
+                end
+            end
+        end
+
+        if not best_p then
+            local min_w = 999999
+            for i = 1, #world.players do
+                local wp = world.players[i]
+                local p = wp and wp.entity
+                if p and p.IsValid and p.IsAlive and not p.IsLocal and not (p.Health and p.Health <= 0) then
+                    if wp.name ~= lp_name then
+                        local wd = p:DistanceTo() or 999999
+                        if wd < min_w then
+                            min_w = wd
+                            best_p = wp
+                        end
+                    end
+                end
+            end
+        end
+        return best_p
+    end
+
+    local function get_player_loadout_data(wp)
+        local top_row = { nil, nil, nil, nil, nil, nil, nil, nil }
+        local bot_row = { nil, nil, nil, nil, nil, nil, nil }
+        local active_tool = nil
+
+        local char = wp.entity and wp.entity.Character
+        if char then
+            local clothing = char:FindFirstChild("Clothing")
+            if clothing then
+                local function c_read(k)
+                    local o = clothing:FindFirstChild(k)
+                    return o and get_inst_name(o.Value)
+                end
+                top_row[1] = c_read("ClothingHeadware")
+                top_row[2] = c_read("ClothingMask")
+                top_row[3] = c_read("ClothingChestRig")
+                top_row[4] = c_read("ClothingShirt")
+                top_row[5] = c_read("ClothingBackpack")
+                top_row[6] = c_read("ClothingLegArmor")
+                top_row[7] = c_read("ClothingPants")
+                top_row[8] = c_read("ClothingGloves")
+            end
+            local rc = char:FindFirstChild("RealClothing")
+            if rc then
+                for _, m in ipairs(rc:GetChildren()) do
+                    local mn = m.Name
+                    local ml = mn:lower()
+                    if not top_row[1] and (ml:find("fast") or ml:find("altyn") or ml:find("zsh") or ml:find("ssh") or ml:find("6b") or ml:find("helmet")) then top_row[1] = mn
+                    elseif not top_row[2] and (ml:find("mask") or ml:find("gp") or ml:find("balaclava")) then top_row[2] = mn
+                    elseif not top_row[3] and (ml:find("vest") or ml:find("jpc") or ml:find("outer") or ml:find("6b") or ml:find("pantsir")) then top_row[3] = mn
+                    elseif not top_row[4] and ml:find("shirt") then top_row[4] = mn
+                    elseif not top_row[5] and (ml:find("pack") or ml:find("bag") or ml:find("lynx") or ml:find("attak")) then top_row[5] = mn
+                    elseif not top_row[6] and (ml:find("knee") or ml:find("lower") or ml:find("leg")) then top_row[6] = mn
+                    elseif not top_row[7] and ml:find("pants") then top_row[7] = mn
+                    elseif not top_row[8] and (ml:find("glove") or ml:find("wrap")) then top_row[8] = mn
+                    end
+                end
+            end
+        end
+
+        if wp.inventory then
+            for _, item_name in ipairs(wp.inventory) do
+                local il = item_name:lower()
+                if not top_row[1] and (il:find("fast") or il:find("altyn") or il:find("zsh") or il:find("ssh") or il:find("6b") or il:find("helmet")) then top_row[1] = item_name
+                elseif not top_row[2] and (il:find("mask") or il:find("gp") or il:find("balaclava")) then top_row[2] = item_name
+                elseif not top_row[3] and (il:find("vest") or il:find("jpc") or il:find("outer") or il:find("6b") or il:find("pantsir")) then top_row[3] = item_name
+                elseif not top_row[4] and il:find("shirt") then top_row[4] = item_name
+                elseif not top_row[5] and (il:find("pack") or il:find("bag") or il:find("lynx") or il:find("attak")) then top_row[5] = item_name
+                elseif not top_row[6] and (il:find("knee") or il:find("lower") or il:find("leg")) then top_row[6] = item_name
+                elseif not top_row[7] and il:find("pants") then top_row[7] = item_name
+                elseif not top_row[8] and (il:find("glove") or il:find("wrap")) then top_row[8] = item_name
+                end
+            end
+        end
+
+        local rep = game.ReplicatedStorage
+        local rep_p = rep and rep:FindFirstChild("Players")
+        local pdata = rep_p and rep_p:FindFirstChild(wp.name)
+        local gv = pdata and ((pdata:FindFirstChild("Status") and pdata.Status:FindFirstChild("GameplayVariables")) or pdata:FindFirstChild("GameplayVariables"))
+        if gv then
+            local eq = gv:FindFirstChild("EquippedTool")
+            active_tool = eq and get_inst_name(eq.Value)
+            local hb = gv:FindFirstChild("Hotbar")
+            if hb then
+                local function hb_read(k)
+                    local o = hb:FindFirstChild(k)
+                    return o and get_inst_name(o.Value)
+                end
+                bot_row[1] = hb_read("ItemBack1")
+                bot_row[2] = hb_read("ItemBack2")
+                bot_row[3] = hb_read("ItemHip1")
+                bot_row[4] = hb_read("Hotbar4")
+                bot_row[5] = hb_read("Hotbar5")
+                bot_row[6] = hb_read("Hotbar6")
+                bot_row[7] = hb_read("Hotbar7")
+            end
+        end
+
+        if not active_tool and wp.equipped then
+            active_tool = wp.equipped
+        end
+
+        if bot_row[3] then
+            local p_chk = bot_row[3]:lower():gsub("[%s%-_]", "")
+            if not PISTOLS[p_chk] then
+                if not bot_row[1] then bot_row[1] = bot_row[3]
+                elseif not bot_row[2] then bot_row[2] = bot_row[3] end
+                bot_row[3] = nil
+            end
+        end
+
+        if not bot_row[3] and wp.inventory then
+            for _, item_name in ipairs(wp.inventory) do
+                local c = item_name:lower():gsub("[%s%-_]", "")
+                if PISTOLS[c] then
+                    bot_row[3] = item_name
+                    break
+                end
+            end
+        end
+
+        if not bot_row[1] and active_tool then
+            local act_c = active_tool:lower():gsub("[%s%-_]", "")
+            if not PISTOLS[act_c] then
+                bot_row[1] = active_tool
+            end
+        end
+
+        return top_row, bot_row, active_tool
+    end
+
+    draw_player_loadout = function()
+        if not get_val("b_loadout_esp", false) then return end
+
+        if not loadout_ui.initialized then
+            loadout_ui.initialized = true
+            loadout_ui.x = get_val("b_loadout_x", 420) or 420
+            loadout_ui.y = get_val("b_loadout_y", 120) or 120
+        end
+
+        local wp = find_best_target()
+        local is_preview = false
+        if not wp then
+            if boba_menu_open then
+                is_preview = true
+            else
+                return
+            end
+        end
+
+        local top_labels = {"HELM", "MASK", "VEST", "SHIRT", "BAG", "KNEE", "PANTS", "GLOVE"}
+        local bot_labels = {"PRI 1", "PRI 2", "PIST", "4", "5", "6", "7"}
+
+        local top_row, bot_row, active_tool
+        local pname, pdist
+        if is_preview then
+            pname = "Target Player"
+            pdist = 124
+            top_row = {"Altyn", "Balaclava", "JPC", "WastelandShirt", "Attak5", "Kneepads", "WastelandPants", "CombatGloves"}
+            bot_row = {"AKM", "Mosin", "Makarov", "AI2", "AA2", "PMN2", nil}
+            active_tool = "AKM"
+        else
+            top_row, bot_row, active_tool = get_player_loadout_data(wp)
+            pname = resolve_target_name(wp)
+            pdist = math.floor((wp.entity and wp.entity:DistanceTo()) or 0)
+        end
+
+        local cur_theme_idx = get_val("b_menu_theme", 0) or 0
+        local cur_theme_data = THEMES[cur_theme_idx + 1] or THEMES[1]
+        local is_rainbow = (get_val("b_rainbow_mode", false) == true)
+        local theme_col, theme_sub
+        if is_rainbow then
+            local now_t = tick()
+            theme_col = hsv_to_rgb((now_t * 0.35) % 1.0, 0.85, 1.0)
+            theme_sub = hsv_to_rgb((now_t * 0.35 + 0.38) % 1.0, 0.85, 1.0)
+        else
+            theme_col = cur_theme_data.col
+            theme_sub = { theme_col[1] * 0.88, theme_col[2] * 0.88, theme_col[3] * 0.88, 1.0 }
+        end
+
+        local tr = math.floor(theme_col[1] * 255)
+        local tg = math.floor(theme_col[2] * 255)
+        local tb = math.floor(theme_col[3] * 255)
+
+        local slot_sz = get_val("b_loadout_sz", 38) or 38
+        if slot_sz < 24 then slot_sz = 24 end
+        local gap = 4
+
+        local top_w = 8 * slot_sz + 7 * gap
+        local bot_w = 7 * slot_sz + 6 * gap
+        local total_w = top_w + 12
+        local total_h = 34 + slot_sz + 5 + slot_sz + 8
+
+        local px = loadout_ui.x
+        local py = loadout_ui.y
+
+        local mx, my = input.GetMousePosition()
+        mx = (type(mx) == "number" and mx) or 0
+        my = (type(my) == "number" and my) or 0
+        local lmb = input.IsKeyDown(0x01) or false
+        local is_click = lmb and not loadout_ui.last_lmb
+
+        if boba_menu_open then
+            if is_click and not loadout_ui.dragging then
+                if mx >= px and mx <= px + total_w and my >= py and my <= py + 30 then
+                    loadout_ui.dragging = true
+                    loadout_ui.drag_ox = mx - px
+                    loadout_ui.drag_oy = my - py
+                end
+            end
+        end
+
+        if loadout_ui.dragging then
+            if lmb then
+                loadout_ui.x = math.max(0, mx - loadout_ui.drag_ox)
+                loadout_ui.y = math.max(0, my - loadout_ui.drag_oy)
+                px = loadout_ui.x
+                py = loadout_ui.y
+            else
+                loadout_ui.dragging = false
+                set_val("b_loadout_x", loadout_ui.x)
+                set_val("b_loadout_y", loadout_ui.y)
+            end
+        end
+        loadout_ui.last_lmb = lmb
+
+        draw.RectFilled(px, py, total_w, total_h, {0.02, 0.02, 0.03, 0.70}, 4)
+        draw.Rect(px, py, total_w, total_h, {tr / 255 * 0.45, tg / 255 * 0.45, tb / 255 * 0.45, 0.45}, 4, 1)
+
+        local cx = px + math.floor(total_w / 2)
+        local nw, _ = draw.GetTextSize(pname, 13)
+        nw = (type(nw) == "number" and nw > 0 and nw) or 60
+        local dist_str = "[" .. tostring(pdist) .. "m]"
+        local dw, _ = draw.GetTextSize(dist_str, 10)
+        dw = (type(dw) == "number" and dw > 0 and dw) or 30
+
+        local line_y = py + 12
+        draw.Line(px + 8, line_y, cx - math.floor(nw / 2) - 6, line_y, theme_col, 1)
+        draw.Text(cx - math.floor(nw / 2), py + 4, pname, theme_col, 13)
+        draw.Line(cx + math.floor(nw / 2) + 6, line_y, px + total_w - 8, line_y, theme_col, 1)
+
+        draw.Text(cx - math.floor(dw / 2), py + 19, dist_str, theme_sub, 10)
+
+        local top_y = py + 34
+        for i = 1, 8 do
+            local sx = px + 6 + (i - 1) * (slot_sz + gap)
+            local sy = top_y
+            local iname = top_row[i]
+            draw.RectFilled(sx, sy, slot_sz, slot_sz, {0.02, 0.02, 0.03, 0.95}, 3)
+            draw.Rect(sx, sy, slot_sz, slot_sz, {0.20, 0.20, 0.26, 0.6}, 3, 1)
+            if iname then
+                local h = get_icon(iname)
+                if h then
+                    local pad = 6
+                    local max_w = slot_sz - pad
+                    local max_h = slot_sz - pad
+                    local w_px = max_w
+                    local h_px = max_h
+                    local ok_sz, rw, rh = pcall(draw.ImageSize, h)
+                    if ok_sz and type(rw) == "number" and type(rh) == "number" and rw > 0 and rh > 0 then
+                        local sc = math.min(max_w / rw, max_h / rh)
+                        w_px = math.max(1, math.floor(rw * sc))
+                        h_px = math.max(1, math.floor(rh * sc))
+                    end
+                    local dx = sx + math.floor((slot_sz - w_px) / 2)
+                    local dy = sy + math.floor((slot_sz - h_px) / 2)
+                    pcall(draw.Image, h, dx, dy, w_px, h_px, 255, 255, 255, 255)
+                else
+                    local s_txt = iname
+                    if #s_txt > 6 then s_txt = s_txt:sub(1, 5) end
+                    local tw, _ = draw.GetTextSize(s_txt, 9)
+                    tw = (type(tw) == "number" and tw > 0 and tw) or 18
+                    draw.Text(sx + math.floor((slot_sz - tw) / 2), sy + math.floor(slot_sz / 2) - 5, s_txt, theme_sub, 9)
+                end
+            else
+                local lbl = top_labels[i] or ""
+                local tw, _ = draw.GetTextSize(lbl, 8)
+                tw = (type(tw) == "number" and tw > 0 and tw) or 16
+                draw.Text(sx + math.floor((slot_sz - tw) / 2), sy + math.floor(slot_sz / 2) - 4, lbl, {0.35, 0.35, 0.40, 0.35}, 8)
+            end
+        end
+
+        local bot_ox = math.floor((slot_sz + gap) / 2)
+        local bot_y = top_y + slot_sz + 5
+        for j = 1, 7 do
+            local sx = px + 6 + bot_ox + (j - 1) * (slot_sz + gap)
+            local sy = bot_y
+            local iname = bot_row[j]
+            local is_eq = false
+            if iname and active_tool then
+                local a1 = iname:lower():gsub("[%s%-_]", "")
+                local a2 = active_tool:lower():gsub("[%s%-_]", "")
+                if a1 == a2 or a1:find(a2, 1, true) or a2:find(a1, 1, true) then
+                    is_eq = true
+                end
+            end
+
+            if is_eq then
+                draw.RectFilled(sx, sy, slot_sz, slot_sz, {0.02, 0.02, 0.03, 0.95}, 3)
+                draw.Rect(sx, sy, slot_sz, slot_sz, theme_col, 3, 2)
+            else
+                draw.RectFilled(sx, sy, slot_sz, slot_sz, {0.02, 0.02, 0.03, 0.95}, 3)
+                draw.Rect(sx, sy, slot_sz, slot_sz, {0.20, 0.20, 0.26, 0.6}, 3, 1)
+            end
+
+            if iname then
+                local h = get_icon(iname)
+                if h then
+                    local pad = 6
+                    local max_w = slot_sz - pad
+                    local max_h = slot_sz - pad
+                    local w_px = max_w
+                    local h_px = max_h
+                    local ok_sz, rw, rh = pcall(draw.ImageSize, h)
+                    if ok_sz and type(rw) == "number" and type(rh) == "number" and rw > 0 and rh > 0 then
+                        local sc = math.min(max_w / rw, max_h / rh)
+                        w_px = math.max(1, math.floor(rw * sc))
+                        h_px = math.max(1, math.floor(rh * sc))
+                    end
+                    local dx = sx + math.floor((slot_sz - w_px) / 2)
+                    local dy = sy + math.floor((slot_sz - h_px) / 2)
+                    pcall(draw.Image, h, dx, dy, w_px, h_px, 255, 255, 255, 255)
+                else
+                    local s_txt = iname
+                    if #s_txt > 6 then s_txt = s_txt:sub(1, 5) end
+                    local tw, _ = draw.GetTextSize(s_txt, 9)
+                    tw = (type(tw) == "number" and tw > 0 and tw) or 18
+                    draw.Text(sx + math.floor((slot_sz - tw) / 2), sy + math.floor(slot_sz / 2) - 5, s_txt, is_eq and theme_col or theme_sub, 9)
+                end
+            else
+                local lbl = bot_labels[j] or ""
+                local tw, _ = draw.GetTextSize(lbl, 8)
+                tw = (type(tw) == "number" and tw > 0 and tw) or 16
+                draw.Text(sx + math.floor((slot_sz - tw) / 2), sy + math.floor(slot_sz / 2) - 4, lbl, {0.35, 0.35, 0.40, 0.35}, 8)
+            end
+        end
+    end
+end
+
 
 _G.on_frame = function()
 local pkey = mk("b_panic")
@@ -5535,6 +6262,7 @@ pcall(draw_corpse_markers)
 pcall(draw_boss_panel)
 pcall(draw_mod_alert)
 pcall(draw_slf_panel)
+pcall(draw_player_loadout)
 local m_ok, m_err = pcall(draw_nixware_menu)
 if not m_ok and m_err then
     print("[BOBA MENU ERROR] " .. tostring(m_err))
