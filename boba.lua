@@ -81,6 +81,7 @@ local boba_store = {
 
     b_cont = false,
     b_cont_items = false,
+    b_cont_filter = 0,
     b_cont_range = 500,
     b_loot = false,
     b_loot_range = 400,
@@ -127,6 +128,7 @@ local boba_store = {
     b_slf = false,
     b_mod_alert = false,
     b_mod_mode = 1,
+    b_cheater_finder = false,
 
     b_skin_enable = false,
     b_skin_knife = 0,
@@ -388,7 +390,6 @@ EnzoPlush="special", DozerPlush="special", AntonPlush="special",
 WhisperPlush="special", CatToken="special", InflatedCrown="special",
 SolterStatue="special", Matryoshka="special", WeddingRing="special",
 MikeShades="special", Football="special", Teapot="special",
-EstonianBorderMap="special", KeyChain="special",
 SerumGreen="special", SerumPurple="special",
 SerumRed="special", SerumYellow="special",
 ImmunsterReactor="special",
@@ -418,10 +419,91 @@ or lower:find("ssd") or lower:find("ram") or lower:find("token")
 or lower:find("crown") or lower:find("statue") or lower:find("ring")
 or lower:find("ticket") or lower:find("intel") or lower:find("document")
 or lower:find("artifact") or lower:find("diamond") or lower:find("ruby")
-or lower:find("emerald") or lower:find("nvg") then
+or lower:find("emerald") or lower:find("nvg") or lower:find("replica") then
 return "special"
 end
 return "misc"
+end
+
+local OP_LOOT_MAP = {
+AKM=true, AKMN=true, PKM=true, AsVal=true, FAL=true,
+M4=true, SVD=true, Mosin=true, R700=true, RPG7=true,
+Groza=true, MP5SD=true, Saiga12=true, ADAR15=true,
+FlareGun=true, SPSh44=true, AnarchyTomahawk=true,
+ButterflyKnife=true, ButterflyKnifeZenith=true, Cutlass=true,
+FlipKnifeShark=true, Greatsword=true, IceAxe=true,
+IceDagger=true, Karambit=true, Kukri=true, Longsword=true,
+M9Fade=true, M9XR7=true, PlasmaNinjato=true, Scythe=true,
+GoldenDV2=true, RealGoldenDV2=true, GoldenMakarov=true,
+Altyn=true, AltynVisor=true, ScavKingHelmet=true, ScavKingVest=true,
+["6B43"]=true, IOTV4=true, DozerArmor=true, FastMT=true,
+FastVisor=true, MaskaVisor=true, QuadNVG=true, TitanShield=true, HSPV=true,
+DAGR=true,
+AntonPlush=true, DozerPlush=true, EnzoPlush=true, WhisperPlush=true,
+GoldenTicket=true, GPU=true, CPU=true, SSD=true, RAM=true,
+Gold50g=true, GoldSkull=true, GoldWatch=true, SolterStatue=true,
+Matryoshka=true, Teapot=true, WeddingRing=true, CatToken=true,
+InflatedCrown=true, MikeShades=true, ThermalModule=true, Reapir=true,
+Defib=true, PortableConsole=true, Smartphone=true, Radio=true,
+GiftTier1=true, GiftTier2=true, GiftTier3=true, Rubles=true,
+RedCard=true, BlueCard=true, OrangeCard=true, EVACKey=true,
+FactoryGarageKey=true, FrigateKey=true, LighthouseKey=true, PoolKey=true,
+AirfieldTunnelsKey=true, GallerySecurityKey=true, CraneKey=true,
+HydroBasementKey=true, DormA211Key=true, DormB203Key=true, B05Key=true,
+ATCKey=true, Apartment13Key=true, Apartment21Key=true, CitySubstationtKey=true,
+FuelingStationKey=true, VillageKey=true, Villa1Key=true,
+SerumGreen=true, SerumPurple=true, SerumRed=true, SerumYellow=true,
+ImmunsterReactor=true
+}
+
+local function is_mag_or_trash(name)
+if not name or name == "" then return true end
+local low = name:lower()
+if low:find("keychain") or low:find("estonian") or low:find("fabric") then return true end
+if low == "map" or low:find("map") then return true end
+if low:find("mag") or low:find("drum") or low:find("ammobox") or low:match("%d+rnd") then return true end
+return false
+end
+
+local function is_op_loot(name)
+if not name or name == "" then return false end
+local base = name:match("^(.-)%s*x%d+$") or name
+if is_mag_or_trash(base) then return false end
+if OP_LOOT_MAP[base] then return true end
+local low = base:lower()
+if low:find("plush") or low:find("card") or low:find("gold") or low:find("ticket") or low:find("gpu") or low:find("dagr") then
+return true
+end
+return false
+end
+
+local TRASH_ITEMS = {
+Bandage=true, WoundDressing=true, Rags=true,
+Beans=true, ChocolateBar=true, Jerky=true, WaterBottle=true,
+BloxyCola=true, CatfrogSoda=true, KevCola=true, ResKola=true,
+CondensedMilk=true, Tortilla=true,
+Nails=true, Bolts=true, Nuts=true, DuctTape=true, SuperGlue=true,
+Soap=true, MatchBox=true, LightBulb=true, Wrench=true,
+FlatScrewdriver=true, PH2Screwdriver=true, SteelPipe=true,
+Planks=true, MetalChunks=true, Gunpowder=true, AABattery=true,
+Cologne=true, NaCl=true, GP5Filter=true, Sandbag=true, Barricade=true,
+KeyChain=true, EstonianBorderMap=true, Map=true,
+AramidFabric=true, CottonFabric=true, LinenFabric=true, RipstopFabric=true
+}
+
+local function is_good_item(name)
+if not name or name == "" then return false end
+local base = name:match("^(.-)%s*x%d+$") or name
+if TRASH_ITEMS[base] or is_mag_or_trash(base) then return false end
+if OP_LOOT_MAP and OP_LOOT_MAP[base] then return true end
+local low = base:lower()
+if low:find("key") or low:find("card") or low:find("plush")
+or low:find("dagr") or low:find("gold") or low:find("ticket") or low:find("gpu")
+or low:find("serum") or low:find("statue") or low:find("replica")
+or low:find("nvg") or low:find("scope") or low:find("suppressor") then
+return true
+end
+return false
 end
 
 local LOOT_PASS = {
@@ -627,7 +709,11 @@ local function set_val(id, val)
     elseif id == "b_extract_range" then cfg.extract_r = val
     elseif id == "b_hazard" then cfg.hazard = val
     elseif id == "b_hazard_range" then cfg.hazard_r = val
-    elseif id == "b_cont" then cfg.cont = val
+    elseif id == "b_cont" then cfg.cont = val; if val and scan_containers then pcall(scan_containers) end
+    elseif id == "b_cont_items" then cfg.cont_items = val
+    elseif id == "b_cont_range" then cfg.cont_range = val
+    elseif id == "b_cont_filter" then cfg.cont_filter = val
+    elseif id == "b_cheater_finder" then cfg.cheater_finder = val
     elseif id == "b_menu_key" then cfg.menu_key = val
     elseif id == "b_menu_theme" then cfg.menu_theme = val
     elseif id == "b_hard_side" then cfg.hard_side = val
@@ -662,7 +748,8 @@ end
 
 local function get_root(model)
 if not model then return nil end
-local r = model:FindFirstChild("HumanoidRootPart")
+local r = model.PrimaryPart
+or model:FindFirstChild("HumanoidRootPart")
 or model:FindFirstChild("Root")
 or model:FindFirstChild("MainPart")
 if r then return r end
@@ -771,7 +858,7 @@ local CFG_IDS = {
 "b_esp_staff","b_esp_armor","b_esp_hvt","b_esp_vis_tag",
 "b_chams","b_chams_mode","b_chams_vc","b_wep_chams","b_wep_chams_style","b_wep_chams_pulse",
 "b_npc","b_npc_box","b_npc_hp","b_npc_name","b_npc_dist","b_npc_skel","b_npc_range",
-"b_cont","b_cont_items","b_cont_range",
+"b_cont","b_cont_items","b_cont_filter","b_cont_range",
 "b_loot","b_loot_range","b_loot_filter",
 "b_corpse","b_corpse_items","b_corpse_range",
 "b_quest","b_quest_range",
@@ -789,7 +876,7 @@ local CFG_IDS = {
 "b_car","b_car_range",
 "b_radar","b_radar_sz","b_radar_range","b_radar_rot",
 "b_hitmarker","b_corpse_x",
-"b_boss","b_slf","b_mod_alert","b_mod_mode",
+"b_boss","b_slf","b_mod_alert","b_mod_mode","b_cheater_finder",
 "b_skin_enable","b_skin_knife","b_skin_gun","b_skin_armor",
 "b_fov_changer","b_fov_val","b_fov_ads_safe",
 "b_menu_key","b_menu_theme","b_hard_side","b_rainbow_mode"
@@ -1031,15 +1118,68 @@ if not ok then notify.Error("Load failed", tostring(err)) end
 end
 
 
-local function get_inventory(model)
-local inv = model:FindFirstChild("Inventory")
-if not inv then return nil end
-local ch = inv:GetChildren()
-if #ch == 0 then return nil end
-local counts = {}
+local function collect_inventory_items(folder, out_list, depth)
+if not folder or depth > 4 then return end
+local ch = folder:GetChildren()
 for i = 1, #ch do
-local n = ch[i].Name
-if n ~= "" then counts[n] = (counts[n] or 0) + 1 end
+local child = ch[i]
+local cname = child.Name
+local low_cn = cname:lower()
+if cname ~= "Attachments" and cname ~= "LoadedAmmo" and cname ~= "Properties" and cname ~= "Connections"
+and not low_cn:find("keychain") and not low_cn:find("estonian") then
+local iname = nil
+if child:IsA("ObjectValue") and child.Value then
+iname = child.Value.Name
+elseif child:IsA("StringValue") and child.Value ~= "" then
+iname = child.Value
+elseif child:IsA("Model") or child:IsA("Tool") then
+iname = child.Name
+elseif child.ClassName == "Folder" and tonumber(cname) == nil and cname ~= "Inventory" then
+iname = cname
+end
+if not iname or tonumber(iname) ~= nil or iname:match("^Slot%d+") or iname:match("^Item%d+") then
+if child:IsA("ObjectValue") and child.Value then
+iname = child.Value.Name
+elseif child:IsA("StringValue") and child.Value ~= "" then
+iname = child.Value
+else
+local sub_iv = child:FindFirstChild("ItemName") or child:FindFirstChild("Item") or child:FindFirstChild("Value")
+if sub_iv then
+if sub_iv:IsA("StringValue") and sub_iv.Value ~= "" then
+iname = sub_iv.Value
+elseif sub_iv:IsA("ObjectValue") and sub_iv.Value then
+iname = sub_iv.Value.Name
+end
+end
+end
+end
+local low_in = iname and iname:lower() or ""
+local is_kc = low_cn:find("keychain") or low_in:find("keychain") or low_in:find("estonian")
+if iname and not is_kc and not is_mag_or_trash(iname) and tonumber(iname) == nil and not iname:match("^Slot%d+") and not iname:match("^Item%d+") and iname ~= "Properties" and iname ~= "MeshPart" and iname ~= "Model" and iname ~= "Folder" and iname ~= "Part" then
+out_list[#out_list+1] = iname
+end
+if not is_kc then
+local sub_inv = child:FindFirstChild("Inventory")
+if sub_inv then
+collect_inventory_items(sub_inv, out_list, depth + 1)
+elseif child.ClassName == "Folder" and tonumber(cname) ~= nil then
+collect_inventory_items(child, out_list, depth + 1)
+end
+end
+end
+end
+end
+
+local function get_inventory(model)
+local inv = model:FindFirstChild("Inventory") or model:FindFirstChild("Items")
+if not inv then return nil end
+local items = {}
+collect_inventory_items(inv, items, 0)
+if #items == 0 then return nil end
+local counts = {}
+for i = 1, #items do
+local n = items[i]
+counts[n] = (counts[n] or 0) + 1
 end
 local out = {}
 for n, c in pairs(counts) do
@@ -1049,12 +1189,14 @@ return #out > 0 and out or nil
 end
 
 local CONTAINER_NAMES = {
-SportBag = true, LargeMilitaryBox = true, MedBag = true,
+SportBag = true, LargeMilitaryBox = true, MedBag = true, SatchelBag = true,
 MilitaryCrate = true, CashRegister = true, ModificationStation = true,
 SmallMilitaryBox = true, WoodenCrate = true, Toolbox = true,
 MedicalCabinet = true, Locker = true, FileCabinet = true, FilingCabinet = true,
 Safe = true, HiddenCache = true, PC = true, SerumContainer = true,
 GrenadeCrate = true, LargeABPOPABox = true, SmallShippingCrate = true,
+LargeShippingCrate = true, Fridge = true, KGBBag = true,
+SupplyDropMilitary = true, SupplyDropMilitary_Default = true, SupplyDropMilitary_XMAS = true,
 }
 
 local function scan_containers()
@@ -1065,18 +1207,16 @@ if not ws then world.containers = result; return end
 local seen = {}
 local function check_container(m)
     if not m or seen[m] then return end
-    if m.ClassName == "Model" and (CONTAINER_NAMES[m.Name] or m:FindFirstChild("Inventory")) then
-        local inv = m:FindFirstChild("Inventory")
-        if inv and inv.ClassName == "Folder" then
-            local part = get_root(m)
-            if part then
-                seen[m] = true
-                result[#result+1] = {
-                    name = m.Name,
-                    part = part,
-                    contents = get_inventory(m)
-                }
-            end
+    if m.ClassName == "Model" and not m:FindFirstChildOfClass("Humanoid") and (CONTAINER_NAMES[m.Name] or m:FindFirstChild("Inventory")) then
+        local part = get_root(m)
+        if part then
+            seen[m] = true
+            result[#result+1] = {
+                name = m.Name,
+                part = part,
+                model = m,
+                contents = get_inventory(m)
+            }
         end
     end
 end
@@ -1085,6 +1225,41 @@ local cont_folder = ws:FindFirstChild("Containers") or ws:FindFirstChild("LootCo
 if cont_folder then
     local cch = cont_folder:GetChildren()
     for i = 1, #cch do check_container(cch[i]) end
+end
+
+local nocoll = ws:FindFirstChild("NoCollision")
+if nocoll then
+    local ls = nocoll:FindFirstChild("LootSpawns")
+    if ls then
+        local cr = ls:FindFirstChild("Crates")
+        if cr then
+            local cch = cr:GetChildren()
+            for i = 1, #cch do check_container(cch[i]) end
+        end
+        local op = ls:FindFirstChild("Open")
+        if op then
+            local och = op:GetChildren()
+            for i = 1, #och do check_container(och[i]) end
+        end
+    end
+end
+
+local wch = ws:GetChildren()
+for i = 1, #wch do
+    local m = wch[i]
+    if m and m.ClassName == "Model" then
+        if CONTAINER_NAMES[m.Name] or m:FindFirstChild("Inventory") then
+            check_container(m)
+        else
+            local sub_c = m:GetChildren()
+            for k = 1, #sub_c do
+                local sm = sub_c[k]
+                if sm and sm.ClassName == "Model" and (CONTAINER_NAMES[sm.Name] or sm:FindFirstChild("Inventory")) then
+                    check_container(sm)
+                end
+            end
+        end
+    end
 end
 world.containers = result
 end
@@ -1236,6 +1411,53 @@ end
 world.quests = result
 end
 
+local longshot_kills = {}
+
+local function parse_kill_message(msg)
+if not msg or type(msg) ~= "string" or msg == "" then return end
+local lower_msg = msg:lower()
+if not (lower_msg:find("kill") or lower_msg:find("elim") or lower_msg:find("shot") or lower_msg:find("snip") or lower_msg:find("from") or lower_msg:find("m%]") or lower_msg:find("m%)") or lower_msg:find("%d+m")) then
+return
+end
+local dist_num = nil
+for d in msg:gmatch("(%d+)%s*[mM]") do
+local n = tonumber(d)
+if n and n >= 100 and (not dist_num or n > dist_num) then
+dist_num = n
+end
+end
+if not dist_num then
+for d in msg:gmatch("(%d+)%s*meters") do
+local n = tonumber(d)
+if n and n >= 100 and (not dist_num or n > dist_num) then
+dist_num = n
+end
+end
+end
+if dist_num and dist_num >= 100 then
+local players = entity.GetPlayers()
+if players then
+for i = 1, #players do
+local p = players[i]
+if p and p.Name and p.Name ~= "" then
+local pname = p.Name
+local pos = msg:find(pname, 1, true)
+if pos then
+local d_pos = msg:find(tostring(dist_num), 1, true)
+if not d_pos or pos <= d_pos then
+longshot_kills[pname] = (longshot_kills[pname] or 0) + 1
+if longshot_kills[pname] >= 5 and notify and notify.Warning then
+notify.Warning("CHEATER DETECTED", pname .. " (5x Longshots)", 8)
+end
+break
+end
+end
+end
+end
+end
+end
+end
+
 local function scan_players()
 local result = {}
 local players = entity.GetPlayers()
@@ -1248,34 +1470,75 @@ if p and p.IsValid and p.IsAlive then
     local pname = p.Name or ""
     local inv = {}
     local equipped = nil
+    local kd = 0
+    local is_cheater = false
     if rep_p then
         local data = rep_p:FindFirstChild(pname)
         if data then
             local inv_f = data:FindFirstChild("Inventory")
             if inv_f then
-                local ch = inv_f:GetChildren()
-                for j = 1, #ch do
-                    if ch[j].Name ~= "" then
-                        inv[#inv+1] = ch[j].Name
+                collect_inventory_items(inv_f, inv, 0)
+            end
+            local st = data:FindFirstChild("Status")
+            local gv = (st and st:FindFirstChild("GameplayVariables")) or data:FindFirstChild("GameplayVariables")
+            if gv then
+                local hb = gv:FindFirstChild("Hotbar")
+                if hb then
+                    collect_inventory_items(hb, inv, 0)
+                end
+                local eq = gv:FindFirstChild("EquippedTool")
+                if eq and eq.Value then
+                    local v = eq.Value
+                    if type(v) == "string" and v ~= "" then
+                        equipped = v
+                    elseif type(v) == "userdata" then
+                        equipped = v.Name
                     end
                 end
             end
-            local st = data:FindFirstChild("Status")
-            if st then
-                local gv = st:FindFirstChild("GameplayVariables")
-                if gv then
-                    local eq = gv:FindFirstChild("EquippedTool")
-                    if eq and eq.Value then
-                        local v = eq.Value
-                        if type(v) == "string" and v ~= "" then
-                            equipped = v
-                        elseif type(v) == "userdata" then
-                            equipped = v.Name
-                        end
+            local ws_f = data:FindFirstChild("WipeStatistics") or data:FindFirstChild("Statistics")
+            if not ws_f and st then
+                ws_f = st:FindFirstChild("WipeStatistics") or st:FindFirstChild("Statistics")
+            end
+            if ws_f then
+                local pvp_kdr = ws_f:FindFirstChild("PVPKDR") or ws_f:FindFirstChild("KDR") or ws_f:FindFirstChild("KD")
+                if pvp_kdr and pvp_kdr.Value and tonumber(pvp_kdr.Value) then
+                    kd = tonumber(pvp_kdr.Value)
+                else
+                    local pk = ws_f:FindFirstChild("PVPKills") or ws_f:FindFirstChild("Kills")
+                    local pd = ws_f:FindFirstChild("Deaths")
+                    local k_n = pk and pk.Value and tonumber(pk.Value) or 0
+                    local d_n = pd and pd.Value and tonumber(pd.Value) or 0
+                    if k_n > 0 or d_n > 0 then
+                        kd = k_n / math.max(1, d_n)
                     end
                 end
             end
         end
+    end
+    if kd == 0 then
+        local pl = game.Players:FindFirstChild(pname)
+        if pl then
+            local ls = pl:FindFirstChild("leaderstats")
+            if ls then
+                local pvp_kdr = ls:FindFirstChild("PVPKDR") or ls:FindFirstChild("KDR") or ls:FindFirstChild("KD")
+                if pvp_kdr and pvp_kdr.Value and tonumber(pvp_kdr.Value) then
+                    kd = tonumber(pvp_kdr.Value)
+                else
+                    local pk = ls:FindFirstChild("PVPKills") or ls:FindFirstChild("Kills")
+                    local pd = ls:FindFirstChild("Deaths")
+                    local k_n = pk and pk.Value and tonumber(pk.Value) or 0
+                    local d_n = pd and pd.Value and tonumber(pd.Value) or 0
+                    if k_n > 0 or d_n > 0 then
+                        kd = k_n / math.max(1, d_n)
+                    end
+                end
+            end
+        end
+    end
+    local ls_kills = longshot_kills[pname] or 0
+    if kd >= 1.5 or ls_kills >= 5 then
+        is_cheater = true
     end
     local head_ref = nil
     local helmet = nil
@@ -1302,16 +1565,20 @@ if p and p.IsValid and p.IsAlive then
         FrigateKey = true, GoldBar = true
     }
     for j = 1, #inv do
-        if HVT_KEYS[inv[j]] then
-            hvt = inv[j]
-            break
+        local iname = inv[j]
+        if HVT_KEYS[iname] or (OP_LOOT_MAP and OP_LOOT_MAP[iname]) then
+            if HVT_KEYS[iname] or iname:find("Plush") or iname == "GoldenTicket" or iname == "GPU" or iname:find("Card") then
+                hvt = iname
+                break
+            end
         end
     end
     result[#result+1] = {
         name = pname,
         display = p.DisplayName or pname,
         entity = p, inventory = inv, equipped = equipped,
-        head = head_ref, helmet = helmet, vest = vest, hvt = hvt
+        head = head_ref, helmet = helmet, vest = vest, hvt = hvt,
+        kd = kd, is_cheater = is_cheater
     }
 end
 end
@@ -1471,20 +1738,21 @@ cfg.npc_skel  = mg("b_npc_skel")
 cfg.npc_skel_c= mc("b_npc_skel")
 cfg.npc_range = mg("b_npc_range")
 
-cfg.cont      = mg("b_cont")
-cfg.cont_c    = mc("b_cont")
-cfg.cont_items= mg("b_cont_items")
-cfg.cont_range= mg("b_cont_range")
-cfg.loot      = mg("b_loot")
-cfg.loot_c    = mc("b_loot")
-cfg.loot_range= mg("b_loot_range")
-cfg.corpse    = mg("b_corpse")
-cfg.corpse_c  = mc("b_corpse")
-cfg.corpse_i  = mg("b_corpse_items")
-cfg.corpse_r  = mg("b_corpse_range")
-cfg.quest     = mg("b_quest")
-cfg.quest_c   = mc("b_quest")
-cfg.quest_r   = mg("b_quest_range")
+cfg.cont      = get_val("b_cont", false)
+cfg.cont_c    = mc("b_cont", {0.2, 0.8, 1, 1})
+cfg.cont_items= get_val("b_cont_items", false)
+cfg.cont_filter = get_val("b_cont_filter", 0) or 0
+cfg.cont_range= get_val("b_cont_range", 500) or 500
+cfg.loot      = get_val("b_loot", false)
+cfg.loot_c    = mc("b_loot", {0.4, 1, 0.4, 1})
+cfg.loot_range= get_val("b_loot_range", 400) or 400
+cfg.corpse    = get_val("b_corpse", false)
+cfg.corpse_c  = mc("b_corpse", {1, 0.3, 0.3, 1})
+cfg.corpse_i  = get_val("b_corpse_items", false)
+cfg.corpse_r  = get_val("b_corpse_range", 500) or 500
+cfg.quest     = get_val("b_quest", false)
+cfg.quest_c   = mc("b_quest", {1, 0.85, 0.2, 1})
+cfg.quest_r   = get_val("b_quest_range", 800) or 800
 
 cfg.aim       = get_val("b_aim", false)
 cfg.aim_key   = get_val("b_aim_key", 0)
@@ -1572,6 +1840,7 @@ cfg.boss      = mg("b_boss")
 cfg.slf       = mg("b_slf")
 cfg.mod_alert = mg("b_mod_alert")
 cfg.mod_mode  = mg("b_mod_mode")
+cfg.cheater_finder = mg("b_cheater_finder")
 
 cfg.skin_enable = mg("b_skin_enable")
 cfg.skin_knife = mg("b_skin_knife") or 0
@@ -1801,6 +2070,15 @@ for i = 1, #players do
         end
 
         local label_y = b.y - 2
+        local p_data = p_data_map[p.Name]
+        if cfg.cheater_finder and p_data and p_data.is_cheater then
+            local ctxt = "CHEATER"
+            local ctw = draw.GetTextSize(ctxt, 12)
+            label_y = label_y - 13
+            draw.Text(mid - ctw * 0.5 + 1, label_y + 1, ctxt, {0, 0, 0, 0.95}, 12)
+            draw.Text(mid - ctw * 0.5, label_y, ctxt, {1, 0.2, 0.2, 1}, 12)
+        end
+
         if cfg.esp_name then
             local nm = (p.DisplayName and p.DisplayName ~= "" and p.DisplayName) or (p.Name and p.Name ~= "" and p.Name) or "Player"
             if is_staff then nm = "[STAFF] " .. nm end
@@ -2000,17 +2278,21 @@ if not pos then return end
 local cam = camera.GetPosition()
 if not cam then return end
 local dist = dist3(pos.X, pos.Y, pos.Z, cam.X, cam.Y, cam.Z)
+max_r = (type(max_r) == "number" and max_r) or 500
 if dist > max_r / 0.28 then return end
 local sx, sy, vis = utility.WorldToScreen(pos.X, pos.Y, pos.Z)
 if not vis then return end
 local txt = format("%s [%dm]", name, floor(dist * 0.28))
 local tw = draw.GetTextSize(txt, 13)
+col = (type(col) == "table" and col) or {0.2, 0.8, 1, 1}
 draw.Text(sx - tw*0.5, sy, txt, col, 13)
 if show_items and contents then
 local ly = sy + 14
 for j = 1, #contents do
-    local itw = draw.GetTextSize(contents[j], 11)
-    draw.Text(sx - itw*0.5, ly, contents[j], GRAY, 11)
+    local itxt = contents[j]
+    local itw = draw.GetTextSize(itxt, 11)
+    local icol = (is_op_loot and is_op_loot(itxt)) and {1, 0.85, 0.2, 1} or GRAY
+    draw.Text(sx - itw*0.5, ly, itxt, icol, 11)
     ly = ly + 12
 end
 end
@@ -2020,8 +2302,22 @@ local function draw_world_esp()
 if cfg.cont then
 for i = 1, #world.containers do
     local c = world.containers[i]
+    local items_to_show = c.contents
+    if cfg.cont_items and not items_to_show and c.model then
+        c.contents = get_inventory(c.model)
+        items_to_show = c.contents
+    end
+    if cfg.cont_items and items_to_show and cfg.cont_filter == 1 then
+        local op_items = {}
+        for j = 1, #items_to_show do
+            if is_op_loot(items_to_show[j]) then
+                op_items[#op_items+1] = items_to_show[j]
+            end
+        end
+        items_to_show = #op_items > 0 and op_items or nil
+    end
     draw_world_label(c.part, c.name, cfg.cont_c,
-        cfg.cont_range, c.contents, cfg.cont_items)
+        cfg.cont_range, items_to_show, cfg.cont_items)
 end
 end
 if cfg.loot then
@@ -2039,8 +2335,18 @@ if cfg.corpse then
 for i = 1, #world.corpses do
     local c = world.corpses[i]
     local label = "☠ " .. c.name
+    local corpse_items = c.contents
+    if cfg.corpse_i and corpse_items then
+        local good_c_items = {}
+        for j = 1, #corpse_items do
+            if is_good_item(corpse_items[j]) then
+                good_c_items[#good_c_items+1] = corpse_items[j]
+            end
+        end
+        corpse_items = #good_c_items > 0 and good_c_items or nil
+    end
     draw_world_label(c.part, label, cfg.corpse_c,
-        cfg.corpse_r, c.contents, cfg.corpse_i)
+        cfg.corpse_r, corpse_items, cfg.corpse_i)
 end
 end
 if cfg.quest then
@@ -2727,7 +3033,7 @@ if world.players then
     for i = 1, #world.players do
         local d = world.players[i]
         local p = d.entity
-        if p and p.IsValid and p.IsAlive and not p.IsLocal then
+        if p and p.IsValid and p.IsAlive and not p.IsLocal and not (p.Health and p.Health <= 0) then
             local pos = p.Position
             if pos then
                 local sx, sy, sv = utility.WorldToScreen(pos.X, pos.Y, pos.Z)
@@ -2766,17 +3072,21 @@ else
     if closest.inventory then
         for j = 1, #closest.inventory do
             local iname = closest.inventory[j]
-            local cat = get_item_category(iname)
-            if cat == "weapon" and cfg.inv_weap then
-                if iname ~= closest.equipped then
-                    weapons[#weapons+1] = iname
+            local base = iname:match("^(.-)%s*x%d+$") or iname
+            if not is_mag_or_trash(base) and not TRASH_ITEMS[base] then
+                local cat = get_item_category(base)
+                local is_good = is_good_item(base)
+                if (cat == "special" or is_good) and cfg.inv_special then
+                    specials[#specials+1] = iname
+                elseif cat == "weapon" and cfg.inv_weap then
+                    if iname ~= closest.equipped then
+                        weapons[#weapons+1] = iname
+                    end
+                elseif cat == "armor" and cfg.inv_armor then
+                    armor[#armor+1] = iname
+                elseif cfg.inv_misc and is_good then
+                    misc_items[#misc_items+1] = iname
                 end
-            elseif cat == "armor" and cfg.inv_armor then
-                armor[#armor+1] = iname
-            elseif cat == "special" and cfg.inv_special then
-                specials[#specials+1] = iname
-            elseif cat == "misc" and cfg.inv_misc then
-                misc_items[#misc_items+1] = iname
             end
         end
     end
@@ -2795,6 +3105,9 @@ else
     end
 
     lines[#lines+1] = {txt = pname, col = theme_col, size = 13}
+    if cfg.cheater_finder and closest.is_cheater then
+        lines[#lines+1] = {txt = "CHEATER", col = {1, 0.2, 0.2, 1}, size = 12}
+    end
     local inv_dist = closest.entity and closest.entity:DistanceTo()
     if inv_dist then
         lines[#lines+1] = {txt = format("%dm away", floor(inv_dist * M_PER_STUD)), col = theme_sub, size = 11}
@@ -4528,7 +4841,7 @@ local function draw_menu()
 
 local function draw_checkbox(x, y, label, key)
         local box_sz = 16
-        local hov = mx >= x and mx <= x + 210 and my >= y and my <= y + box_sz + 4
+        local hov = mx >= x - 6 and mx <= x + 230 and my >= y - 4 and my <= y + box_sz + 6
 
         local is_on = (get_val(key, false) == true)
         if is_click and hov then
@@ -4725,14 +5038,15 @@ local function draw_checkbox(x, y, label, key)
         draw_card(col3_x, py + 30, 240, 481, "Containers & World Loot")
         draw_checkbox(col3_x + 12, py + 60, "Containers ESP", "b_cont")
         draw_checkbox(col3_x + 12, py + 86, "Show Container Items", "b_cont_items")
-        draw_slider("s_cont_r", col3_x + 12, py + 114, 216, "Container Range", "b_cont_range", 10, 500, "%d m")
-        draw_checkbox(col3_x + 12, py + 154, "World Loot ESP", "b_loot")
-        draw_slider("s_loot_r", col3_x + 12, py + 180, 216, "Loot Range", "b_loot_range", 10, 500, "%d m")
-        draw_checkbox(col3_x + 12, py + 220, "Corpses ESP", "b_corpse")
-        draw_checkbox(col3_x + 12, py + 246, "Show Corpse Items", "b_corpse_items")
-        draw_slider("s_corp_r", col3_x + 12, py + 274, 216, "Corpse Range", "b_corpse_range", 10, 600, "%d m")
-        draw_checkbox(col3_x + 12, py + 314, "Quest Items ESP", "b_quest")
-        draw_slider("s_qst_r", col3_x + 12, py + 340, 216, "Quest Range", "b_quest_range", 10, 1000, "%d m")
+        draw_cycle(col3_x + 12, py + 112, 216, "Container Loot", "b_cont_filter", {"All Content", "OP Loot Only"})
+        draw_slider("s_cont_r", col3_x + 12, py + 140, 216, "Container Range", "b_cont_range", 10, 500, "%d m")
+        draw_checkbox(col3_x + 12, py + 180, "World Loot ESP", "b_loot")
+        draw_slider("s_loot_r", col3_x + 12, py + 206, 216, "Loot Range", "b_loot_range", 10, 500, "%d m")
+        draw_checkbox(col3_x + 12, py + 246, "Corpses ESP", "b_corpse")
+        draw_checkbox(col3_x + 12, py + 272, "Show Corpse Items", "b_corpse_items")
+        draw_slider("s_corp_r", col3_x + 12, py + 300, 216, "Corpse Range", "b_corpse_range", 10, 600, "%d m")
+        draw_checkbox(col3_x + 12, py + 340, "Quest Items ESP", "b_quest")
+        draw_slider("s_qst_r", col3_x + 12, py + 366, 216, "Quest Range", "b_quest_range", 10, 1000, "%d m")
 
     elseif ui.tab == 2 then
         local col1_x = px + 78
@@ -4768,9 +5082,10 @@ local function draw_checkbox(x, y, label, key)
         draw_checkbox(col1_x + 12, py + 112, "Show Armor", "b_inv_armor")
         draw_checkbox(col1_x + 12, py + 138, "Show Special Items", "b_inv_special")
         draw_checkbox(col1_x + 12, py + 164, "Show Misc Items", "b_inv_misc")
-        draw_checkbox(col1_x + 12, py + 196, "Server Loot Finder (SLF)", "b_slf")
-        draw_checkbox(col1_x + 12, py + 222, "Boss Tracker", "b_boss")
-        draw_checkbox(col1_x + 12, py + 248, "Mod Alert", "b_mod_alert")
+        draw_checkbox(col1_x + 12, py + 196, "Cheater Finder (1.5+ KD)", "b_cheater_finder")
+        draw_checkbox(col1_x + 12, py + 222, "Server Loot Finder (SLF)", "b_slf")
+        draw_checkbox(col1_x + 12, py + 248, "Boss Tracker", "b_boss")
+        draw_checkbox(col1_x + 12, py + 274, "Mod Alert", "b_mod_alert")
 
         local col2_x = px + 322
         draw_card(col2_x, py + 30, 236, 481, "FOV Changer & World")
@@ -5090,9 +5405,36 @@ end
 
 silent_ok = false
 
-
-
-
+pcall(function()
+    local rep = game.ReplicatedStorage
+    local remotes = rep and rep:FindFirstChild("Remotes")
+    if remotes then
+        local s_msg = remotes:FindFirstChild("ServerMessage")
+        if s_msg and s_msg.OnClientEvent then
+            s_msg.OnClientEvent:Connect(function(msg)
+                if type(msg) == "string" then parse_kill_message(msg) end
+            end)
+        end
+        local n_msg = remotes:FindFirstChild("NotificationMessage")
+        if n_msg and n_msg.OnClientEvent then
+            n_msg.OnClientEvent:Connect(function(msg)
+                if type(msg) == "string" then parse_kill_message(msg) end
+            end)
+        end
+    end
+    local tcs = game:GetService("TextChatService")
+    if tcs and tcs.MessageReceived then
+        tcs.MessageReceived:Connect(function(msgObj)
+            if msgObj and msgObj.Text then parse_kill_message(msgObj.Text) end
+        end)
+    end
+    local logs = game:GetService("LogService")
+    if logs and logs.MessageOut then
+        logs.MessageOut:Connect(function(msg)
+            parse_kill_message(msg)
+        end)
+    end
+end)
 
 notify.Success("BOBA loaded", "Project Delta Suite")
 print("[BOBA] loaded — " .. entity.GetPlayerCount() .. " players online")
