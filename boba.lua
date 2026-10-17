@@ -513,6 +513,8 @@ local MOD_NAMES = {
 
 
 
+local opt = {}
+
 local function mg(id, def)
     if opt[id] ~= nil then return opt[id] end
     local ok, v = pcall(function() return menu.Get(id) end)
@@ -4001,7 +4003,6 @@ local tabs = {
     { icon = "C", label = "Config" }
 }
 
-local opt = {}
 
 local cfg_name_buf = ""
 local cfg_focus = false
