@@ -150,7 +150,7 @@ local boba_colors = {
     b_esp_snap = {0.4, 0.7, 1.0, 1.0},
     b_esp_staff = {1, 0.2, 1, 1},
     b_esp_hvt = {1, 0.85, 0.2, 1},
-    b_chams_vis = {0.2, 0.85, 1.0, 1},
+    b_chams_vis = {0.0, 1.0, 0.3, 1},
     b_chams_occ = {1.0, 0.25, 0.25, 1},
     b_wep_chams = {0.2, 0.85, 1.0, 1.0},
     b_npc_box = {1, 0.3, 0.3, 1},
@@ -513,14 +513,99 @@ local MOD_NAMES = {
 
 
 
-local function mc(id)
-local ok, c = pcall(function() return menu.GetColor(id) end)
-return ok and c or {1,1,1,1}
+local function mg(id, def)
+    if opt[id] ~= nil then return opt[id] end
+    local ok, v = pcall(function() return menu.Get(id) end)
+    if ok and v ~= nil and v ~= false then
+        opt[id] = v
+        return v
+    end
+    if def ~= nil then return def end
+    return ok and v or false
 end
 
-local function mk(id)
-local ok, k = pcall(function() return menu.GetKey(id) end)
-return ok and k or 0
+local function mc(id, def)
+    local ok, c = pcall(function() return menu.GetColor(id) end)
+    if ok and c ~= nil then return c end
+    if def ~= nil then return def end
+    return {1, 1, 1, 1}
+end
+
+local function mk(id, def)
+    local ok, k = pcall(function() return menu.GetKey(id) end)
+    if ok and k ~= nil then return k end
+    if def ~= nil then return def end
+    return 0
+end
+
+local function get_val(id, def)
+    if opt[id] ~= nil then return opt[id] end
+    local v = mg(id, nil)
+    if v ~= nil then
+        opt[id] = v
+        return v
+    end
+    if def ~= nil then return def end
+    return v
+end
+
+local function set_val(id, val)
+    opt[id] = val
+    pcall(function() menu.Set(id, val) end)
+    if id == "b_aim" then cfg.aim = val
+    elseif id == "b_aim_key" then cfg.aim_key = val
+    elseif id == "b_aim_bone" then cfg.aim_bone = val
+    elseif id == "b_silent_bone" then cfg.sil_bone = val
+    elseif id == "b_npc_aim_bone" then cfg.na_bone = val
+    elseif id == "b_aim_fov" then cfg.aim_fov = val
+    elseif id == "b_aim_smooth" then cfg.aim_sm = val
+    elseif id == "b_aim_pred" then cfg.aim_pred = val
+    elseif id == "b_aim_lead" then cfg.aim_lead = val
+    elseif id == "b_aim_lock" then cfg.aim_lock = val
+    elseif id == "b_aim_team" then cfg.aim_team = val
+    elseif id == "b_aim_fov_draw" then cfg.aim_draw = val
+    elseif id == "b_aim_fov_filled" then cfg.aim_fov_filled = val
+    elseif id == "b_silent" then cfg.silent = val
+    elseif id == "b_silent_fov" then cfg.sil_fov = val
+    elseif id == "b_silent_multipoint" then cfg.sil_multi = val
+    elseif id == "b_silent_team" then cfg.sil_team = val
+    elseif id == "b_silent_fov_draw" then cfg.sil_draw = val
+    elseif id == "b_silent_fov_filled" then cfg.sil_fov_filled = val
+    elseif id == "b_npc_aim" then cfg.npc_aim = val
+    elseif id == "b_npc_aim_fov" then cfg.na_fov = val
+    elseif id == "b_npc_aim_smooth" then cfg.na_sm = val
+    elseif id == "b_npc_aim_pred" then cfg.na_pred = val
+    elseif id == "b_npc_aim_fov_draw" then cfg.na_draw = val
+    elseif id == "b_npc_aim_fov_filled" then cfg.na_fov_filled = val
+    elseif id == "b_esp" then cfg.esp = val
+    elseif id == "b_esp_box" then cfg.esp_box = val
+    elseif id == "b_esp_skel" then cfg.esp_skel = val
+    elseif id == "b_esp_hp" then cfg.esp_hp = val
+    elseif id == "b_esp_hp_txt" then cfg.esp_hp_t = val
+    elseif id == "b_esp_name" then cfg.esp_name = val
+    elseif id == "b_esp_dist" then cfg.esp_dist = val
+    elseif id == "b_esp_weapon" then cfg.esp_wep = val
+    elseif id == "b_esp_snap" then cfg.esp_snap = val
+    elseif id == "b_esp_range" then cfg.esp_range = val
+    elseif id == "b_esp_vis_tag" then cfg.esp_vis_tag = val
+    elseif id == "b_chams" then cfg.chams = val
+    elseif id == "b_chams_vc" then cfg.chams_vis = val
+    elseif id == "b_npc" then cfg.npc = val
+    elseif id == "b_npc_box" then cfg.npc_box = val
+    elseif id == "b_npc_hp" then cfg.npc_hp = val
+    elseif id == "b_npc_name" then cfg.npc_name = val
+    elseif id == "b_npc_skel" then cfg.npc_skel = val
+    elseif id == "b_npc_range" then cfg.npc_range = val
+    elseif id == "b_extract" then cfg.extract = val
+    elseif id == "b_extract_range" then cfg.extract_r = val
+    elseif id == "b_hazard" then cfg.hazard = val
+    elseif id == "b_hazard_range" then cfg.hazard_r = val
+    elseif id == "b_cont" then cfg.cont = val
+    elseif id == "b_menu_key" then cfg.menu_key = val
+    elseif id == "b_menu_theme" then cfg.menu_theme = val
+    elseif id == "b_hard_side" then cfg.hard_side = val
+    elseif id == "b_rainbow_mode" then cfg.rainbow_mode = val
+    end
 end
 
 local diag_queue = {}
@@ -590,7 +675,9 @@ local function get_cam_instance()
 end
 
 local function check_player_visible(cam_pos, p)
-    if not p or not p.IsValid or not p.IsAlive then return false end
+    if not p then return false end
+    local is_dead = (p.IsDead == true) or (p.Health ~= nil and p.Health <= 0)
+    if is_dead then return false end
 
     if raycast and raycast.IsPlayerVisible then
         if p.Character then
@@ -606,17 +693,15 @@ local function check_player_visible(cam_pos, p)
     end
 
     if raycast and raycast.IsVisible and cam_pos then
-        local look = (camera and camera.GetLookVector and camera.GetLookVector()) or Vector3.New(0, 0, -1)
-        local origin = cam_pos + look * 2.5
         local hp = p.HeadPosition
         if hp then
-            local ok_vis, vis = pcall(raycast.IsVisible, origin, hp)
+            local ok_vis, vis = pcall(raycast.IsVisible, cam_pos, hp)
             if ok_vis and vis then return true end
         end
         local cp = p.Position
         if cp then
             local chest = Vector3.New(cp.X, cp.Y + 0.8, cp.Z)
-            local ok_vis, vis = pcall(raycast.IsVisible, origin, chest)
+            local ok_vis, vis = pcall(raycast.IsVisible, cam_pos, chest)
             if ok_vis and vis then return true end
         end
     end
@@ -699,8 +784,20 @@ return ""
 end
 
 local function get_cfg_path(name)
-name = (name and name ~= "") and name or "default"
-return get_cfg_folder() .. "boba_config_" .. name .. ".txt"
+    name = (name and name ~= "") and name or "default"
+    local folder = get_cfg_folder()
+    local path = folder .. "boba_config_" .. name .. ".txt"
+    if name == "default" then
+        local f = io.open(path, "r")
+        if f then f:close(); return path end
+        local alt = folder .. "boba_config.txt"
+        local f2 = io.open(alt, "r")
+        if f2 then f2:close(); return alt end
+        local alt3 = folder .. "boba_config_boba.txt"
+        local f3 = io.open(alt3, "r")
+        if f3 then f3:close(); return alt3 end
+    end
+    return path
 end
 
 local function get_cfg_list_path()
@@ -813,9 +910,19 @@ for _, id in ipairs(COLOR_IDS) do
                 nr, ng, nb = 0.85, 0.85, 0.85
             end
             if na < 0.5 then na = 1.0 end
+            local c_arr = {nr, ng, nb, na}
             pcall(function()
-                menu.SetColor(id, {nr, ng, nb, na})
+                menu.SetColor(id, c_arr)
             end)
+            if id == "b_chams_vis" then cfg.chams_vc = c_arr
+            elseif id == "b_chams_occ" then cfg.chams_oc = c_arr
+            elseif id == "b_esp_box" then cfg.esp_box_c = c_arr
+            elseif id == "b_esp_name" then cfg.esp_name_c = c_arr
+            elseif id == "b_esp_skel" then cfg.esp_skel_c = c_arr
+            elseif id == "b_esp_snap" then cfg.esp_snap_c = c_arr
+            elseif id == "b_npc_box" then cfg.npc_box_c = c_arr
+            elseif id == "b_npc_name" then cfg.npc_name_c = c_arr
+            end
         end
     end
 end
@@ -1588,7 +1695,7 @@ for i = 1, #players do
             is_eye_vis = check_player_visible(cam_pos, p)
         end
 
-        if cfg.esp_vis_tag and is_eye_vis then
+        if (cfg.esp_vis_tag or cfg.chams_vis) and is_eye_vis then
             local vtag = "[VISIBLE]"
             local vcol = {0.15, 1, 0.25, 1}
             local vtw = draw.GetTextSize(vtag, 11)
@@ -1651,11 +1758,13 @@ for i = 1, #players do
         end
 
         if cfg.chams then
+            local vc = cfg.chams_vc or {0.0, 1.0, 0.3, 1.0}
+            local oc = cfg.chams_oc or {1.0, 0.25, 0.25, 1.0}
             if cfg.chams_vis then
-                local col = (is_eye_vis == true) and cfg.chams_vc or cfg.chams_oc
-                draw.ChamsPlayer(p, col, cfg.chams_m)
+                local col = (is_eye_vis == true) and vc or oc
+                draw.ChamsPlayer(p, col, cfg.chams_m or 0)
             else
-                draw.ChamsPlayer(p, cfg.chams_vc, cfg.chams_m)
+                draw.ChamsPlayer(p, vc, cfg.chams_m or 0)
             end
         end
 
@@ -3919,116 +4028,6 @@ local PALETTE = {
 
 
 
-local function mg(id, def)
-    local ok, v = pcall(function() return menu.Get(id) end)
-    if ok and v ~= nil then return v end
-    return def
-end
-
-local function get_val(id, def)
-    if opt[id] ~= nil then return opt[id] end
-    local mv = mg(id, nil)
-    if mv ~= nil then
-        opt[id] = mv
-        return mv
-    end
-    return def
-end
-
-local function set_val(id, val)
-    opt[id] = val
-    pcall(function() menu.Set(id, val) end)
-    if id == "b_aim" then cfg.aim = val
-    elseif id == "b_aim_key" then cfg.aim_key = val
-    elseif id == "b_aim_bone" then cfg.aim_bone = val
-    elseif id == "b_silent_bone" then cfg.sil_bone = val
-    elseif id == "b_npc_aim_bone" then cfg.na_bone = val
-    elseif id == "b_aim_fov" then cfg.aim_fov = val
-    elseif id == "b_aim_smooth" then cfg.aim_sm = val
-    elseif id == "b_aim_pred" then cfg.aim_pred = val
-    elseif id == "b_aim_lead" then cfg.aim_lead = val
-    elseif id == "b_aim_lock" then cfg.aim_lock = val
-    elseif id == "b_aim_vis" then cfg.aim_vis = val
-    elseif id == "b_aim_team" then cfg.aim_team = val
-    elseif id == "b_aim_fov_draw" then cfg.aim_draw = val
-    elseif id == "b_aim_fov_filled" then cfg.aim_fov_filled = val
-    elseif id == "b_silent" then cfg.silent = val
-    elseif id == "b_silent_fov" then cfg.sil_fov = val
-    elseif id == "b_silent_multipoint" then cfg.sil_multi = val
-    elseif id == "b_silent_vis" then cfg.sil_vis = val
-    elseif id == "b_silent_team" then cfg.sil_team = val
-    elseif id == "b_silent_fov_draw" then cfg.sil_draw = val
-    elseif id == "b_silent_fov_filled" then cfg.sil_fov_filled = val
-    elseif id == "b_npc_aim" then cfg.npc_aim = val
-    elseif id == "b_npc_aim_fov" then cfg.na_fov = val
-    elseif id == "b_npc_aim_smooth" then cfg.na_sm = val
-    elseif id == "b_npc_aim_pred" then cfg.na_pred = val
-    elseif id == "b_npc_aim_fov_draw" then cfg.na_draw = val
-    elseif id == "b_npc_aim_fov_filled" then cfg.na_fov_filled = val
-    elseif id == "b_esp" then cfg.esp = val
-    elseif id == "b_esp_box" then cfg.esp_box = val
-    elseif id == "b_esp_skel" then cfg.esp_skel = val
-    elseif id == "b_esp_hp" then cfg.esp_hp = val
-    elseif id == "b_esp_hp_txt" then cfg.esp_hp_t = val
-    elseif id == "b_esp_name" then cfg.esp_name = val
-    elseif id == "b_esp_dist" then cfg.esp_dist = val
-    elseif id == "b_esp_weapon" then cfg.esp_wep = val
-    elseif id == "b_esp_snap" then cfg.esp_snap = val
-    elseif id == "b_esp_range" then cfg.esp_range = val
-    elseif id == "b_npc" then cfg.npc = val
-    elseif id == "b_npc_box" then cfg.npc_box = val
-    elseif id == "b_npc_hp" then cfg.npc_hp = val
-    elseif id == "b_npc_name" then cfg.npc_name = val
-    elseif id == "b_npc_skel" then cfg.npc_skel = val
-    elseif id == "b_npc_range" then cfg.npc_range = val
-    elseif id == "b_extract" then cfg.extract = val
-    elseif id == "b_extract_range" then cfg.extract_r = val
-    elseif id == "b_hazard" then cfg.hazard = val
-    elseif id == "b_hazard_range" then cfg.hazard_r = val
-    elseif id == "b_cont" then cfg.cont = val
-    elseif id == "b_cont_items" then cfg.cont_items = val
-    elseif id == "b_cont_range" then cfg.cont_range = val
-    elseif id == "b_loot" then cfg.loot = val
-    elseif id == "b_loot_range" then cfg.loot_range = val
-    elseif id == "b_corpse" then cfg.corpse = val
-    elseif id == "b_corpse_items" then cfg.corpse_i = val
-    elseif id == "b_corpse_range" then cfg.corpse_r = val
-    elseif id == "b_quest" then cfg.quest = val
-    elseif id == "b_quest_range" then cfg.quest_r = val
-    elseif id == "b_chams" then cfg.chams = val
-    elseif id == "b_chams_vc" then cfg.chams_vis = val
-    elseif id == "b_wep_chams" then cfg.wep_chams = val
-    elseif id == "b_wep_chams_pulse" then cfg.wep_chams_pulse = val
-    elseif id == "b_inspect" then cfg.inspect = val
-    elseif id == "b_inv_weap" then cfg.inv_weap = val
-    elseif id == "b_inv_armor" then cfg.inv_armor = val
-    elseif id == "b_inv_special" then cfg.inv_special = val
-    elseif id == "b_inv_misc" then cfg.inv_misc = val
-    elseif id == "b_slf" then cfg.slf = val
-    elseif id == "b_boss" then cfg.boss = val
-    elseif id == "b_mod_alert" then cfg.mod_alert = val
-    elseif id == "b_fov_changer" then cfg.fov_changer = val
-    elseif id == "b_fov_val" then cfg.fov_val = val
-    elseif id == "b_fov_ads_safe" then cfg.fov_ads_safe = val
-    elseif id == "b_nograss" then cfg.nograss = val
-    elseif id == "b_claymore" then cfg.claymore = val
-    elseif id == "b_car" then cfg.car = val
-    elseif id == "b_skin_enable" then cfg.skin_enable = val
-    elseif id == "b_cross" then cfg.cross = val
-    elseif id == "b_cross_sz" then cfg.cross_sz = val
-    elseif id == "b_cross_gap" then cfg.cross_gap = val
-    elseif id == "b_cross_thick" then cfg.cross_thick = val
-    elseif id == "b_cross_spin" then cfg.cross_spin = val
-    elseif id == "b_cross_spin_spd" then cfg.cross_spin_spd = val
-    elseif id == "b_cross_pulse" then cfg.cross_pulse = val
-    elseif id == "b_cross_pulse_spd" then cfg.cross_pulse_spd = val
-    elseif id == "b_cross_style" then cfg.cross_style = val
-    elseif id == "b_menu_key" then cfg.menu_key = val
-    elseif id == "b_menu_theme" then cfg.menu_theme = val
-    elseif id == "b_hard_side" then cfg.hard_side = val
-    elseif id == "b_rainbow_mode" then cfg.rainbow_mode = val
-    end
-end
 
 _G.NixwareSyncVal = function(id, val)
     set_val(id, val)
@@ -4878,3 +4877,4 @@ thread.Create(flush_diag, 3000)
 
 notify.Success("BOBA loaded", "Project Delta Suite")
 print("[BOBA] loaded — " .. entity.GetPlayerCount() .. " players online")
+pcall(function() load_config("default") end)
