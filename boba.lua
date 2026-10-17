@@ -450,6 +450,31 @@ local orig_light = nil
 local orig_grass = nil
 local panic_on = false
 local silent_ok = false
+local boba_menu_open = true
+
+local function is_any_menu_open()
+    if boba_menu_open then return true end
+    local v_open = false
+    pcall(function()
+        if menu then
+            if type(menu.IsOpen) == "function" and menu.IsOpen() then v_open = true
+            elseif type(menu.is_open) == "function" and menu.is_open() then v_open = true
+            elseif type(menu.IsVisible) == "function" and menu.IsVisible() then v_open = true
+            elseif type(menu.is_visible) == "function" and menu.is_visible() then v_open = true
+            end
+        end
+    end)
+    if v_open then return true end
+    pcall(function()
+        if input then
+            if type(input.IsCursorVisible) == "function" and input.IsCursorVisible() then v_open = true
+            elseif type(input.GetCursorVisible) == "function" and input.GetCursorVisible() then v_open = true
+            end
+        end
+    end)
+    return v_open or false
+end
+
 wm_x, wm_y = 10, 10
 wm_drag = false
 wm_dx, wm_dy = 0, 0
@@ -806,6 +831,41 @@ local function get_cfg_list_path()
 return get_cfg_folder() .. "boba_config_list.txt"
 end
 
+local function get_active_cfg_path()
+return get_cfg_folder() .. "boba_active_cfg.txt"
+end
+
+local function read_active_cfg()
+local f = io.open(get_active_cfg_path(), "r")
+if f then
+    local n = f:read("*l")
+    f:close()
+    if n and n:match("^%s*(.-)%s*$") ~= "" then
+        return n:match("^%s*(.-)%s*$")
+    end
+end
+local lf = io.open(get_cfg_list_path(), "r")
+if lf then
+    for line in lf:lines() do
+        local n = line:match("^%s*(.-)%s*$")
+        if n and n ~= "" then
+            lf:close()
+            return n
+        end
+    end
+    lf:close()
+end
+return "default"
+end
+
+local function write_active_cfg(name)
+local f = io.open(get_active_cfg_path(), "w")
+if f then
+    f:write(tostring(name) .. string.char(10))
+    f:close()
+end
+end
+
 local function read_config_list()
 local list = {}
 local f = io.open(get_cfg_list_path(), "r")
@@ -837,10 +897,20 @@ end
 save_config = function(name)
 name = (name and name ~= "") and name or "default"
 local ok, err = pcall(function()
-local f = io.open(get_cfg_path(name), "w")
-if not f then return end
+local primary_path = get_cfg_path(name)
+local f = io.open(primary_path, "w")
+if not f then
+    local folder = get_cfg_folder()
+    primary_path = folder .. "boba_config_" .. name .. ".txt"
+    f = io.open(primary_path, "w")
+end
+if not f then
+    notify.Error("Save failed", "Cannot open " .. name)
+    return
+end
 for _, id in ipairs(CFG_IDS) do
-    local v = mg(id)
+    local v = get_val(id)
+    if v == nil then v = mg(id) end
     if type(v) == "boolean" then
         f:write(id .. "=" .. (v and "1" or "0") .. string.char(10))
     elseif type(v) == "number" then
@@ -854,7 +924,34 @@ for _, id in ipairs(COLOR_IDS) do
             c[1] or 1, c[2] or 1, c[3] or 1, c[4] or 1) .. string.char(10))
     end
 end
+f:flush()
 f:close()
+
+if name == "default" then
+    local alt_f = io.open(get_cfg_folder() .. "boba_config.txt", "w")
+    if alt_f then
+        for _, id in ipairs(CFG_IDS) do
+            local v = get_val(id)
+            if v == nil then v = mg(id) end
+            if type(v) == "boolean" then
+                alt_f:write(id .. "=" .. (v and "1" or "0") .. string.char(10))
+            elseif type(v) == "number" then
+                alt_f:write(id .. "=" .. tostring(v) .. string.char(10))
+            end
+        end
+        for _, id in ipairs(COLOR_IDS) do
+            local c = mc(id)
+            if c then
+                alt_f:write(id .. "_c=" .. format("%.4f,%.4f,%.4f,%.4f",
+                    c[1] or 1, c[2] or 1, c[3] or 1, c[4] or 1) .. string.char(10))
+            end
+        end
+        alt_f:flush()
+        alt_f:close()
+    end
+end
+
+write_active_cfg(name)
 notify.Success("Config saved", name)
 end)
 if not ok then notify.Error("Save failed", tostring(err)) end
@@ -864,6 +961,10 @@ load_config = function(name)
 name = (name and name ~= "") and name or "default"
 local ok, err = pcall(function()
 local f = io.open(get_cfg_path(name), "r")
+if not f and name == "default" then
+    local folder = get_cfg_folder()
+    f = io.open(folder .. "boba_config.txt", "r") or io.open(folder .. "boba_config_boba.txt", "r")
+end
 if not f then
     if name ~= "default" then
         notify.Warning("Config not found", name)
@@ -882,23 +983,18 @@ for _, id in ipairs(CFG_IDS) do
         local actual_val
         if id == "b_fov_changer" then
             actual_val = true
-            pcall(function() menu.Set(id, true) end)
         elseif v == "0" or v == "1" then
             actual_val = (v == "1")
-            pcall(function() menu.Set(id, actual_val) end)
         else
             local n = tonumber(v)
-            if n then
-                actual_val = n
-                pcall(function() menu.Set(id, n) end)
-            end
+            if n then actual_val = n end
         end
-        if actual_val ~= nil and _G.NixwareSyncVal then
-            _G.NixwareSyncVal(id, actual_val)
+        if actual_val ~= nil then
+            set_val(id, actual_val)
         end
     end
 end
-pcall(function() menu.Set("b_fov_changer", true) end)
+set_val("b_fov_changer", true)
 for _, id in ipairs(COLOR_IDS) do
     local cv = data[id .. "_c"]
     if cv then
@@ -928,6 +1024,7 @@ for _, id in ipairs(COLOR_IDS) do
         end
     end
 end
+write_active_cfg(name)
 notify.Success("Config loaded", name)
 end)
 if not ok then notify.Error("Load failed", tostring(err)) end
@@ -993,64 +1090,95 @@ world.containers = result
 end
 
 local function scan_npcs()
-local result = {}
-local ws = game.Workspace
-if not ws then world.npcs = result; return end
-local pnames = {}
-for _, p in ipairs(entity.GetPlayers()) do pnames[p.Name] = true end
+    local result = {}
+    local ws = game.Workspace
+    if not ws then world.npcs = result; return end
+    local pnames = {}
+    for _, p in ipairs(entity.GetPlayers()) do
+        if p.Name and p.Name ~= "" then pnames[p.Name] = true end
+    end
+    local lp = entity.GetLocalPlayer()
+    if lp and lp.Name and lp.Name ~= "" then pnames[lp.Name] = true end
+    local rbx_lp = nil
+    pcall(function() rbx_lp = game.Players.LocalPlayer end)
+    if rbx_lp and rbx_lp.Name and rbx_lp.Name ~= "" then pnames[rbx_lp.Name] = true end
+    local lp_char = (lp and lp.Character) or (rbx_lp and rbx_lp.Character)
 
-local src = ws:FindFirstChild("AiZones")
-or ws:FindFirstChild("AIZones")
-or ws:FindFirstChild("NPCs")
-or ws:FindFirstChild("AI")
-or ws:FindFirstChild("Enemies")
+    local cam = camera.GetPosition()
+    local cx, cy, cz = cam and cam.X or 0, cam and cam.Y or 0, cam and cam.Z or 0
 
-local function process(npc)
-if npc.ClassName ~= "Model" then return end
-if pnames[npc.Name] then return end
-local hum = npc:FindFirstChildOfClass("Humanoid")
-if not hum then return end
-local hp = hum.Health
-if not hp or hp <= 0 then return end
-local head = npc:FindFirstChild("Head")
-if not head then return end
-local parts = {}
-local ch = npc:GetChildren()
-for k = 1, #ch do
-    local p = ch[k]
-    if p:IsA("BasePart") then parts[p.Name] = { part = p } end
-end
-result[#result+1] = {
-    name = npc.Name, model = npc,
-    hum = hum, head = head, parts = parts
-}
-end
+    local function is_player_model(npc)
+        if not npc then return true end
+        if lp_char and npc == lp_char then return true end
+        if pnames[npc.Name] then return true end
+        local rbx_plr = false
+        pcall(function()
+            if game.Players and game.Players.GetPlayerFromCharacter then
+                if game.Players:GetPlayerFromCharacter(npc) then
+                    rbx_plr = true
+                end
+            end
+        end)
+        if rbx_plr then return true end
+        for _, pl in ipairs(entity.GetPlayers()) do
+            if pl.Character and pl.Character == npc then return true end
+        end
+        return false
+    end
 
-local function walk(folder)
-local ch = folder:GetChildren()
-for i = 1, #ch do
-    local c = ch[i]
-    if c.ClassName == "Folder" then walk(c)
-    elseif c.ClassName == "Model" then process(c) end
-end
-end
+    local function process(npc)
+        if npc.ClassName ~= "Model" then return end
+        if is_player_model(npc) then return end
+        if CONTAINER_NAMES and CONTAINER_NAMES[npc.Name] then return end
+        local hum = npc:FindFirstChildOfClass("Humanoid")
+        if not hum then return end
+        local hp = hum.Health
+        if not hp or hp <= 0 then return end
+        local head = npc:FindFirstChild("Head") or npc:FindFirstChild("HeadTopHitBox")
+        local root = npc:FindFirstChild("HumanoidRootPart") or npc:FindFirstChild("Torso") or head
+        if not head and not root then return end
+        local h_part = head or root
+        local hpos = h_part and h_part.Position
+        if hpos and cam then
+            local d = dist3(hpos.X, hpos.Y, hpos.Z, cx, cy, cz)
+            if d < 6 then return end
+        end
+        local parts = {}
+        local ch = npc:GetChildren()
+        for k = 1, #ch do
+            local p = ch[k]
+            if p:IsA("BasePart") then parts[p.Name] = { part = p } end
+        end
+        result[#result+1] = {
+            name = npc.Name, model = npc,
+            hum = hum, head = head or root, parts = parts
+        }
+    end
 
-if src then
-walk(src)
-else
-local ch = ws:GetChildren()
-for i = 1, #ch do
-    local c = ch[i]
-    if c.ClassName == "Model" and not pnames[c.Name]
-        and not CONTAINER_NAMES[c.Name] then
-        local hum = c:FindFirstChildOfClass("Humanoid")
-        if hum and hum.Health and hum.Health > 0 then
+    local function walk(folder)
+        local ch = folder:GetChildren()
+        for i = 1, #ch do
+            local c = ch[i]
+            if c.ClassName == "Folder" then walk(c)
+            elseif c.ClassName == "Model" then process(c) end
+        end
+    end
+
+    local zones = { "AiZones", "AIZones", "NPCs", "AI", "Enemies", "SpawnerZones" }
+    for zi = 1, #zones do
+        local z = ws:FindFirstChild(zones[zi])
+        if z then walk(z) end
+    end
+
+    local ch = ws:GetChildren()
+    for i = 1, #ch do
+        local c = ch[i]
+        if c.ClassName == "Model" and not is_player_model(c) then
             process(c)
         end
     end
-end
-end
-world.npcs = result
+
+    world.npcs = result
 end
 
 local function scan_world_items()
@@ -1554,7 +1682,16 @@ for i = 1, #players do
     local p = players[i]
     if p then
         local lp = entity.GetLocalPlayer()
-        local is_me = p.IsLocal or (lp and (p.UserId == lp.UserId or p.Name == lp.Name or (p.Address and lp.Address and p.Address == lp.Address)))
+        local rbx_lp = nil
+        pcall(function() rbx_lp = game.Players.LocalPlayer end)
+        local is_me = p.IsLocal or (lp and (p == lp or p.UserId == lp.UserId or p.Name == lp.Name or (p.Address and lp.Address and p.Address == lp.Address)))
+        if not is_me and rbx_lp then
+            if (rbx_lp.UserId and p.UserId == rbx_lp.UserId) or (rbx_lp.Name and p.Name == rbx_lp.Name) or (p.Character and rbx_lp.Character and p.Character == rbx_lp.Character) then
+                is_me = true
+            end
+        end
+        local d_chk = p:DistanceTo()
+        if not is_me and d_chk and d_chk < 3 then is_me = true end
         if is_me or not p.IsValid or not p.IsAlive then goto cont end
         if cfg.esp_team and is_same_team(p) then goto cont end
 
@@ -1791,14 +1928,36 @@ if n.head and n.hum then
         local hpos = n.head.Position
         if hpos then
             local dist = dist3(hpos.X, hpos.Y, hpos.Z, cx, cy, cz)
-            if dist <= max_r / 0.28 then
-                local sx, sy, sv = utility.WorldToScreen(hpos.X, hpos.Y, hpos.Z)
-                if sv then
-                    local scale = 1200 / (dist + 1)
-                    local bw = scale * 2.5
-                    local bh = scale * 5.5
-                    local bx = sx - bw * 0.5
-                    local by = sy - scale * 0.8
+            if dist > 6 and dist <= max_r / 0.28 then
+                local parts = n.parts or {}
+                local lf = (parts["LeftFoot"] and parts["LeftFoot"].part) or (parts["LeftLowerLeg"] and parts["LeftLowerLeg"].part) or (parts["Left Leg"] and parts["Left Leg"].part)
+                local rf = (parts["RightFoot"] and parts["RightFoot"].part) or (parts["RightLowerLeg"] and parts["RightLowerLeg"].part) or (parts["Right Leg"] and parts["Right Leg"].part)
+                local foot_y
+                if lf and lf.Position and rf and rf.Position then
+                    foot_y = math.min(lf.Position.Y, rf.Position.Y) - 0.8
+                elseif lf and lf.Position then
+                    foot_y = lf.Position.Y - 0.8
+                elseif rf and rf.Position then
+                    foot_y = rf.Position.Y - 0.8
+                else
+                    local root = (parts["HumanoidRootPart"] and parts["HumanoidRootPart"].part) or (parts["Torso"] and parts["Torso"].part) or (parts["LowerTorso"] and parts["LowerTorso"].part)
+                    if root and root.Position then
+                        foot_y = root.Position.Y - 2.8
+                    else
+                        foot_y = hpos.Y - 4.5
+                    end
+                end
+
+                local top_y_3d = hpos.Y + 0.8
+                local tx, ty, tvis = utility.WorldToScreen(hpos.X, top_y_3d, hpos.Z)
+                local bx_w, by_w, bvis = utility.WorldToScreen(hpos.X, foot_y, hpos.Z)
+
+                if tvis or bvis then
+                    local bh = math.max(16, math.abs(by_w - ty))
+                    local bw = bh * 0.55
+                    local center_x = tvis and tx or bx_w
+                    local bx = center_x - bw * 0.5
+                    local by = math.min(ty, by_w)
 
                     if cfg.npc_box then
                         draw_esp_box(bx, by, bw, bh, cfg.npc_box_c)
@@ -1807,7 +1966,7 @@ if n.head and n.hum then
                         draw_health_bar(bx - 6, by, bh,
                             hp, n.hum.MaxHealth or 100)
                     end
-                    local mid = sx
+                    local mid = bx + bw * 0.5
                     if cfg.npc_name then
                         local tw = draw.GetTextSize(n.name, 13)
                         draw.Text(mid - tw*0.5, by - 15,
@@ -1849,7 +2008,6 @@ if n.head and n.hum then
 end
 end
 end
-
 
 local function draw_world_label(part, name, col, max_r, contents, show_items)
 if not part then return end
@@ -1996,16 +2154,45 @@ end
 
 local get_bone_pos = get_player_bone_pos
 
+local function get_npc_target_bone(n, na_b)
+    local parts = n.parts or {}
+    local model = n.model
+    local function find_p(names)
+        for j = 1, #names do
+            local nm = names[j]
+            if parts[nm] and parts[nm].part and parts[nm].part.Position then
+                return parts[nm].part
+            end
+            if model then
+                local p = model:FindFirstChild(nm)
+                if p and p:IsA("BasePart") and p.Position then
+                    return p
+                end
+            end
+        end
+        return nil
+    end
+
+    local head = n.head or find_p({"Head", "HeadTopHitBox"})
+    local chest = find_p({"UpperTorso", "Torso", "Chest"})
+    local pelvis = find_p({"LowerTorso", "HumanoidRootPart", "Torso", "Pelvis"})
+
+    local b_idx = na_b or 0
+    if b_idx == 0 then
+        return head or chest or pelvis
+    elseif b_idx == 1 then
+        return chest or head or pelvis
+    elseif b_idx == 2 then
+        return pelvis or chest or head
+    end
+    return head or chest or pelvis
+end
+
 local function run_player_aim()
     aim_target_ent = nil
-    if not cfg.aim then
-        locked_target = nil
-        lock_was_down = false
-        return
-    end
     local scx, scy = input.GetScreenCenter()
 
-    if cfg.aim_draw then
+    if cfg.aim and cfg.aim_draw then
         local c = cfg.aim_fov_c or {1, 1, 1, 0.25}
         local a = c[4] or 0.25
         if cfg.aim_fov_filled then
@@ -2014,15 +2201,29 @@ local function run_player_aim()
         draw.Circle(scx, scy, cfg.aim_fov or 150, c, 64)
     end
 
+    if cfg.npc_aim and cfg.na_draw then
+        local c = cfg.na_fov_c or {1, 0.6, 0.6, 0.25}
+        local a = c[4] or 0.25
+        if cfg.na_fov_filled then
+            draw.CircleFilled(scx, scy, cfg.na_fov or 150, {c[1], c[2], c[3], a * 0.4}, 64)
+        end
+        draw.Circle(scx, scy, cfg.na_fov or 150, c, 64)
+    end
+
+    if not cfg.aim and not cfg.npc_aim then
+        locked_target = nil
+        lock_was_down = false
+        return
+    end
+
     local lp = entity.GetLocalPlayer()
-    if not lp then return end
     local cam = camera.GetPosition()
     if not cam then return end
 
     local aim_key_mode = get_val("b_aim_key", 0) or 0
     local key_held = false
     if aim_key_mode == 0 then
-        key_held = input.IsKeyDown(0x02) or input.IsKeyDown(0x01)
+        key_held = input.IsKeyDown(0x02)
     elseif aim_key_mode == 1 then
         key_held = input.IsKeyDown(0x01)
     elseif aim_key_mode == 2 then
@@ -2040,73 +2241,142 @@ local function run_player_aim()
     end
 
     local equipped = nil
-    for wi = 1, #world.players do
-        local wp = world.players[wi]
-        if wp.name == (lp.Name or "") and wp.equipped then
-            equipped = wp.equipped
-            break
+    if lp then
+        for wi = 1, #world.players do
+            local wp = world.players[wi]
+            if wp.name == (lp.Name or "") and wp.equipped then
+                equipped = wp.equipped
+                break
+            end
         end
     end
 
     local b_mode = get_val("b_aim_bone", 0) or 0
+    local na_b = get_val("b_npc_aim_bone", 0) or cfg.na_bone or 0
 
-    local function find_best_target()
-        local players = frame_players or entity.GetPlayers() or {}
-        local best_fov = cfg.aim_fov or 150
-        local best = nil
+    local target = nil
 
-        for i = 1, #players do
-            local p = players[i]
-            local is_me = p and (p.IsLocal or (lp and (p.UserId == lp.UserId or p.Name == lp.Name or (p.Address and lp.Address and p.Address == lp.Address))))
-            if p and not is_me then
-                local is_dead = (p.IsDead == true) or (p.Health ~= nil and p.Health <= 0)
-                if not is_dead then
-                    if cfg.aim_team and is_same_team(p) then goto skip end
+    if cfg.aim_lock and locked_target then
+        local lt = locked_target
+        if lt.is_npc then
+            local n = lt.npc
+            if n and n.hum and n.hum.Health and n.hum.Health > 0 then
+                local bp = get_npc_target_bone(n, na_b)
+                if bp and bp.Position then
+                    lt.bone_pos = bp.Position
+                    lt.part = bp
+                    target = lt
+                end
+            end
+        else
+            local p = lt.player
+            if p and p.IsValid and not p.IsDead and (p.Health == nil or p.Health > 0) then
+                local bp, tp = get_player_bone_pos(p, b_mode, scx, scy)
+                if bp then
+                    lt.bone_pos = bp
+                    lt.part = tp
+                    target = lt
+                end
+            end
+        end
+    end
 
-                    local bone_pos, target_part = get_player_bone_pos(p, b_mode, scx, scy)
-                    if bone_pos then
-                        local bx, by, bv = utility.WorldToScreen(bone_pos.X, bone_pos.Y, bone_pos.Z)
-                        if bv then
-                            local fov = screen_dist(bx, by, scx, scy)
-                            if fov < best_fov then
-                                best_fov = fov
-                                best = { player = p, bone_pos = bone_pos, part = target_part }
+    if not target then
+        local best_p = nil
+        local best_p_fov = cfg.aim_fov or 150
+
+        if cfg.aim then
+            local players = frame_players or entity.GetPlayers() or {}
+            local rbx_lp = nil
+            pcall(function() rbx_lp = game.Players.LocalPlayer end)
+            for i = 1, #players do
+                local p = players[i]
+                local is_me = p and (p.IsLocal or (lp and (p == lp or p.UserId == lp.UserId or p.Name == lp.Name or (p.Address and lp.Address and p.Address == lp.Address))))
+                if not is_me and rbx_lp and p then
+                    if (rbx_lp.UserId and p.UserId == rbx_lp.UserId) or (rbx_lp.Name and p.Name == rbx_lp.Name) or (p.Character and rbx_lp.Character and p.Character == rbx_lp.Character) then
+                        is_me = true
+                    end
+                end
+                local d_chk = p and p:DistanceTo()
+                if not is_me and d_chk and d_chk < 3 then is_me = true end
+                if p and not is_me then
+                    local is_dead = (p.IsDead == true) or (p.Health ~= nil and p.Health <= 0)
+                    if not is_dead then
+                        if cfg.aim_team and is_same_team(p) then goto skip_p end
+                        local bone_pos, target_part = get_player_bone_pos(p, b_mode, scx, scy)
+                        if bone_pos then
+                            local bx, by, bv = utility.WorldToScreen(bone_pos.X, bone_pos.Y, bone_pos.Z)
+                            if bv then
+                                local fov = screen_dist(bx, by, scx, scy)
+                                if fov < best_p_fov then
+                                    best_p_fov = fov
+                                    best_p = { player = p, bone_pos = bone_pos, part = target_part, fov = fov, is_npc = false }
+                                end
+                            end
+                        end
+                    end
+                    ::skip_p::
+                end
+            end
+        end
+
+        local best_npc = nil
+        local best_npc_fov = cfg.na_fov or 150
+
+        if cfg.npc_aim and world and world.npcs and #world.npcs > 0 then
+            for i = 1, #world.npcs do
+                local n = world.npcs[i]
+                if n.hum and n.hum.Health and n.hum.Health > 0 then
+                    local bp = get_npc_target_bone(n, na_b)
+                    if bp and bp.Position then
+                        local pos = bp.Position
+                        local d_c = dist3(pos.X, pos.Y, pos.Z, cam.X, cam.Y, cam.Z)
+                        if d_c > 6 then
+                            local ax, ay, az = pos.X, pos.Y, pos.Z
+                            if cfg.na_pred then
+                                local vel = bp.Velocity
+                                if vel then
+                                    local dist = dist3(ax, ay, az, cam.X, cam.Y, cam.Z)
+                                    local t = dist / 750
+                                    if t > 0.4 then t = 0.4 end
+                                    local vlen = sqrt(vel.X*vel.X + vel.Y*vel.Y + vel.Z*vel.Z)
+                                    if vlen > 2 then
+                                        ax = ax + vel.X * t
+                                        ay = ay + vel.Y * t
+                                        az = az + vel.Z * t
+                                    end
+                                end
+                            end
+                            local sx, sy, sv = utility.WorldToScreen(ax, ay, az)
+                            if sv then
+                                local fov = screen_dist(sx, sy, scx, scy)
+                                if fov < best_npc_fov then
+                                    best_npc_fov = fov
+                                    best_npc = { npc = n, bone_pos = Vector3.New(ax, ay, az), part = bp, fov = fov, is_npc = true }
+                                end
                             end
                         end
                     end
                 end
-                ::skip::
             end
         end
-        return best
-    end
 
-    local target
-    if cfg.aim_lock then
-        if not lock_was_down then
-            locked_target = find_best_target()
+        if best_p and best_npc then
+            if best_p_fov <= best_npc_fov then
+                target = best_p
+            else
+                target = best_npc
+            end
+        elseif best_p then
+            target = best_p
+        elseif best_npc then
+            target = best_npc
+        end
+
+        if cfg.aim_lock and target then
+            locked_target = target
             lock_was_down = true
         end
-        if locked_target then
-            local lt = locked_target
-            if not lt.player or lt.player.IsDead then
-                locked_target = find_best_target()
-            else
-                local bp, tp = get_player_bone_pos(lt.player, b_mode, scx, scy)
-                if bp then
-                    locked_target.bone_pos = bp
-                    locked_target.part = tp
-                else
-                    locked_target = find_best_target()
-                end
-            end
-        end
-        if not locked_target then locked_target = find_best_target() end
-        target = locked_target
-    else
-        locked_target = nil
-        lock_was_down = false
-        target = find_best_target()
     end
 
     if not target then return end
@@ -2114,32 +2384,35 @@ local function run_player_aim()
 
     local bone_pos = target.bone_pos
     local target_part = target.part
-    local p = target.player
     local ax, ay, az = bone_pos.X, bone_pos.Y, bone_pos.Z
+    local sm = 5.0
 
-    local dist_studs = dist3(ax, ay, az, cam.X, cam.Y, cam.Z)
-    local dist_m = dist_studs * M_PER_STUD
-
-    local t_flight = 0
-    if cfg.aim_pred then
-        local speed_ms = get_bullet_speed(equipped)
-        local drop_m, tf = calc_ballistic_drop(dist_m, speed_ms)
-        t_flight = tf
-        local drop_studs = (drop_m * (cfg.aim_pred_scale or 1.0)) * STUDS_PER_M
-        ay = ay + drop_studs
-    end
-
-    if cfg.aim_lead and p.Velocity and t_flight > 0 then
-        local v = p.Velocity
-        local vlen = sqrt(v.X*v.X + v.Y*v.Y + v.Z*v.Z)
-        if vlen > 0.5 then
-            ax = ax + v.X * t_flight
-            ay = ay + v.Y * t_flight
-            az = az + v.Z * t_flight
+    if target.is_npc then
+        sm = cfg.na_sm or 5.0
+    else
+        sm = cfg.aim_sm or 5.0
+        local p = target.player
+        local dist_studs = dist3(ax, ay, az, cam.X, cam.Y, cam.Z)
+        local dist_m = dist_studs * M_PER_STUD
+        local t_flight = 0
+        if cfg.aim_pred then
+            local speed_ms = get_bullet_speed(equipped)
+            local drop_m, tf = calc_ballistic_drop(dist_m, speed_ms)
+            t_flight = tf
+            local drop_studs = (drop_m * (cfg.aim_pred_scale or 1.0)) * STUDS_PER_M
+            ay = ay + drop_studs
+        end
+        if cfg.aim_lead and p and p.Velocity and t_flight > 0 then
+            local v = p.Velocity
+            local vlen = sqrt(v.X*v.X + v.Y*v.Y + v.Z*v.Z)
+            if vlen > 0.5 then
+                ax = ax + v.X * t_flight
+                ay = ay + v.Y * t_flight
+                az = az + v.Z * t_flight
+            end
         end
     end
 
-    local sm = cfg.aim_sm or 5.0
     if sm < 1.0 then sm = 1.0 end
     local sx, sy, on_screen = utility.WorldToScreen(ax, ay, az)
     if on_screen and input and input.MoveMouse then
@@ -2155,66 +2428,7 @@ local function run_player_aim()
 end
 
 local function run_npc_aim()
-local scx, scy = input.GetScreenCenter()
-if cfg.npc_aim and cfg.na_draw then
-    local c = cfg.na_fov_c or {1, 0.6, 0.6, 0.25}
-    local a = c[4] or 0.25
-    if cfg.na_fov_filled then
-        draw.CircleFilled(scx, scy, cfg.na_fov or 150, {c[1], c[2], c[3], a * 0.4}, 64)
-    end
-    draw.Circle(scx, scy, cfg.na_fov or 150, c, 64)
 end
-if not cfg.npc_aim or not world or not world.npcs or #world.npcs == 0 then return end
-
-if not input.IsKeyDown(0x02) then return end
-
-local cam = camera.GetPosition()
-if not cam then return end
-local cx, cy, cz = cam.X, cam.Y, cam.Z
-local bone_name = BONE_MAP[cfg.na_bone]
-local best_fov = cfg.na_fov
-local best_aim = nil
-
-for i = 1, #world.npcs do
-local n = world.npcs[i]
-if n.hum and n.hum.Health and n.hum.Health > 0 then
-    local pd = n.parts[bone_name]
-    if pd and pd.part then
-        local pos = pd.part.Position
-        if pos then
-            local ax, ay, az = pos.X, pos.Y, pos.Z
-            if cfg.na_pred then
-                local vel = pd.part.Velocity
-                if vel then
-                    local dist = dist3(ax, ay, az, cx, cy, cz)
-                    local t = dist / 750
-                    if t > 0.4 then t = 0.4 end
-                    local vlen = sqrt(vel.X*vel.X + vel.Y*vel.Y + vel.Z*vel.Z)
-                    if vlen > 2 then
-                        ax = ax + vel.X * t
-                        ay = ay + vel.Y * t
-                        az = az + vel.Z * t
-                    end
-                end
-            end
-            local sx, sy, sv = utility.WorldToScreen(ax, ay, az)
-            if sv then
-                local fov = screen_dist(sx, sy, scx, scy)
-                if fov < best_fov then
-                    best_fov = fov
-                    best_aim = {x=ax, y=ay, z=az}
-                end
-            end
-        end
-    end
-end
-end
-
-if best_aim then
-camera.LookAt(best_aim.x, best_aim.y, best_aim.z, cfg.na_sm)
-end
-end
-
 
 local sil_rot_idx = 1
 local sil_rot_order = { "Head", "UpperTorso", "LowerTorso" }
@@ -2408,8 +2622,13 @@ if sw and sh and sw > 100 and sh > 100 then
     wm_y = max(0, min(wm_y, sh - h))
 end
 
+local menu_active = is_any_menu_open()
+if not menu_active then
+    wm_drag = false
+end
+
 local mx, my = input.GetMousePosition()
-if input.IsKeyDown(0x01) then
+if menu_active and input.IsKeyDown(0x01) then
 if not wm_drag then
     if mx >= wm_x and mx <= wm_x + w and my >= wm_y and my <= wm_y + h then
         wm_drag = true
@@ -2643,8 +2862,13 @@ if sw and sh and sw > 100 and sh > 100 then
     inv_y = max(0, min(inv_y, sh - ph))
 end
 
+local menu_active = is_any_menu_open()
+if not menu_active then
+    inv_drag = false
+end
+
 local mx, my = input.GetMousePosition()
-if input.IsKeyDown(0x01) then
+if menu_active and input.IsKeyDown(0x01) then
     if not inv_drag then
         if mx >= inv_x and mx <= inv_x + pw and my >= inv_y and my <= inv_y + 24 then
             inv_drag = true
@@ -2903,8 +3127,13 @@ local pw = 170
 local TH, PAD, RH, SH, FS = 24, 8, 18, 16, 12
 local nb, nv = #BOSS_DEFS, #VEHICLE_DEFS
 local ph = TH + SH + (nb * RH) + 4 + SH + (nv * RH) + 4 + PAD
+local menu_active = is_any_menu_open()
+if not menu_active then
+    boss_drag = false
+end
+
 local mx, my = utility.GetMousePos()
-local lmb = input.IsKeyDown(0x01)
+local lmb = menu_active and input.IsKeyDown(0x01)
 if lmb then
 if not boss_drag then
     if mx >= boss_x and mx <= boss_x + pw and my >= boss_y and my <= boss_y + TH then
@@ -3054,8 +3283,13 @@ for _, entry in ipairs(slf_results) do
 end
 ph = ph + PAD
 end
+local menu_active = is_any_menu_open()
+if not menu_active then
+    slf_drag = false
+end
+
 local mx, my = utility.GetMousePos()
-local lmb = input.IsKeyDown(0x01)
+local lmb = menu_active and input.IsKeyDown(0x01)
 if lmb then
 if not slf_drag then
     if mx >= slf_x and mx <= slf_x + pw and my >= slf_y and my <= slf_y + TH then
@@ -4041,6 +4275,7 @@ pcall(function()
 end)
 
 local function draw_menu()
+    boba_menu_open = ui.visible
     local now_t = tick()
 
     if not intro_done then
@@ -4146,6 +4381,7 @@ local function draw_menu()
     end
     if toggle_down and not ui.last_toggle_key then
         ui.visible = not ui.visible
+        boba_menu_open = ui.visible
     end
     ui.last_toggle_key = toggle_down
 
@@ -4230,6 +4466,7 @@ local function draw_menu()
     local close_hov = mx >= close_x and mx <= close_x + close_btn_w and my >= close_y and my <= close_y + title_h - 2
     if is_click and close_hov then
         ui.visible = false
+        boba_menu_open = false
     end
     draw.Text(close_x + 5, close_y + 2, "x", close_hov and {1.0, 0.4, 0.4, 1.0} or {0.6, 0.6, 0.6, 1.0}, 13)
 
@@ -4637,7 +4874,7 @@ local function draw_checkbox(x, y, label, key)
         draw.Text(ibx + 6, iby + 3, cfg_name_buf .. (cfg_focus and "_" or ""), theme_col, 12)
 
         draw_button(col1_x + 12, py + 98, 331, 22, "Create / Save Config", function()
-            local cname = (cfg_name_buf ~= "") and cfg_name_buf or "default"
+            local cname = (cfg_name_buf ~= "") and cfg_name_buf or (selected_cfg ~= "" and selected_cfg or "default")
             save_config(cname)
             local exists = false
             for _, cn in ipairs(cfg_files_list) do
@@ -4648,6 +4885,7 @@ local function draw_checkbox(x, y, label, key)
                 write_config_list(cfg_files_list)
             end
             selected_cfg = cname
+            cfg_name_buf = cname
         end)
 
         draw_button(col1_x + 12, py + 124, 105, 22, "Load Config", function()
@@ -4849,7 +5087,7 @@ _G.onFrame = _G.on_frame
 thread.Create(scan_containers, 15000)
 thread.Create(scan_world_items, 10000)
 thread.Create(scan_quests, 20000)
-thread.Create(scan_npcs, 5000)
+thread.Create(scan_npcs, 1500)
 thread.Create(scan_players, 3000)
 thread.Create(scan_extracts, 30000)
 thread.Create(scan_hazards, 20000)
@@ -4878,4 +5116,9 @@ thread.Create(flush_diag, 3000)
 
 notify.Success("BOBA loaded", "Project Delta Suite")
 print("[BOBA] loaded — " .. entity.GetPlayerCount() .. " players online")
-pcall(function() load_config("default") end)
+pcall(function()
+    local act = read_active_cfg and read_active_cfg() or "default"
+    selected_cfg = act
+    cfg_name_buf = act
+    load_config(act)
+end)
