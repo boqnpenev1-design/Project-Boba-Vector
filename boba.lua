@@ -37,6 +37,8 @@ local boba_store = {
     b_silent_team = false,
     b_silent_fov_draw = false,
     b_silent_fov_filled = false,
+    b_no_recoil = false,
+    b_recoil_reduc = 70,
 
     b_npc_aim = false,
     b_npc_aim_bone = 0,
@@ -649,13 +651,53 @@ end
 
 local function get_val(id, def)
     if opt[id] ~= nil then return opt[id] end
-    local v = mg(id, nil)
-    if v ~= nil then
+    if boba_store and boba_store[id] ~= nil then
+        opt[id] = boba_store[id]
+        return boba_store[id]
+    end
+    local ok, v = pcall(function() return menu.Get(id) end)
+    if ok and v ~= nil and v ~= false then
         opt[id] = v
         return v
     end
     if def ~= nil then return def end
-    return v
+    return false
+end
+
+local RS = game.ReplicatedStorage
+local weapons = RS and RS:FindFirstChild("RangedWeapons")
+local recoil_enabled = false
+local originals = {}
+local reduction = 0.3
+
+local function apply_recoil()
+    if not weapons or not utility.IsValid(weapons) then
+        if RS then weapons = RS:FindFirstChild("RangedWeapons") end
+        if not weapons or not utility.IsValid(weapons) then return end
+    end
+    for _, weapon in ipairs(weapons:GetChildren()) do
+        if not utility.IsValid(weapon) then goto continue end
+        local recoil = weapon:FindFirstChild("RecoilPattern")
+        if not recoil then goto continue end
+        for _, pattern in ipairs(recoil:GetChildren()) do
+            if not utility.IsValid(pattern) then goto continue2 end
+            for _, v in ipairs(pattern:GetChildren()) do
+                if utility.IsValid(v) and v.Value ~= nil then
+                    if recoil_enabled then
+                        if not originals[v.Address] then
+                            originals[v.Address] = v.Value
+                        end
+                        v.Value = originals[v.Address] * reduction
+                    elseif originals[v.Address] then
+                        v.Value = originals[v.Address]
+                        originals[v.Address] = nil
+                    end
+                end
+            end
+            ::continue2::
+        end
+        ::continue::
+    end
 end
 
 local function set_val(id, val)
@@ -680,6 +722,17 @@ local function set_val(id, val)
     elseif id == "b_silent_team" then cfg.sil_team = val
     elseif id == "b_silent_fov_draw" then cfg.sil_draw = val
     elseif id == "b_silent_fov_filled" then cfg.sil_fov_filled = val
+    elseif id == "b_no_recoil" then
+        cfg.no_recoil = val
+        recoil_enabled = (val == true)
+        apply_recoil()
+    elseif id == "b_recoil_reduc" then
+        cfg.recoil_reduc = val
+        local pct = (type(val) == "number" and val) or 70
+        reduction = math.max(0, math.min(1, (100 - pct) / 100))
+        if recoil_enabled then
+            apply_recoil()
+        end
     elseif id == "b_npc_aim" then cfg.npc_aim = val
     elseif id == "b_npc_aim_fov" then cfg.na_fov = val
     elseif id == "b_npc_aim_smooth" then cfg.na_sm = val
@@ -868,6 +921,7 @@ local CFG_IDS = {
 "b_aim_lead","b_aim_lock",
 "b_aim_vis","b_aim_team","b_aim_fov_draw","b_aim_fov_filled",
 "b_silent","b_silent_bone","b_silent_vis_text","b_silent_multipoint","b_silent_fov","b_silent_vis","b_silent_team","b_silent_fov_draw","b_silent_fov_filled",
+"b_no_recoil","b_recoil_reduc",
 "b_npc_aim","b_npc_aim_bone","b_npc_aim_fov","b_npc_aim_smooth","b_npc_aim_bone",
 "b_npc_aim_pred","b_npc_aim_fov_draw","b_npc_aim_fov_filled",
 "b_wm","b_cross","b_cross_style","b_cross_sz","b_cross_gap","b_cross_thick","b_cross_spin","b_cross_spin_spd","b_cross_pulse","b_cross_pulse_spd","b_inspect",
@@ -1776,6 +1830,8 @@ cfg.sil_vis_txt = false
 cfg.sil_multi = get_val("b_silent_multipoint", true)
 cfg.sil_fov   = get_val("b_silent_fov", 200)
 cfg.sil_vis   = mg("b_silent_vis")
+cfg.no_recoil = get_val("b_no_recoil", false)
+cfg.recoil_reduc = get_val("b_recoil_reduc", 70)
 cfg.sil_team  = mg("b_silent_team")
 cfg.sil_draw  = mg("b_silent_fov_draw")
 cfg.sil_fov_filled = mg("b_silent_fov_filled")
@@ -4810,7 +4866,8 @@ local function draw_menu()
     end
 
     local function draw_cycle(x, y, w, label, key, options, callback)
-        local cur_idx = get_val(key, 0) or 0
+        local cur_idx = get_val(key, 0)
+        if type(cur_idx) ~= "number" then cur_idx = 0 end
         if cur_idx < 0 or cur_idx >= #options then cur_idx = 0 end
         local opt_text = options[cur_idx + 1] or options[1] or "Head"
 
@@ -4861,7 +4918,8 @@ local function draw_checkbox(x, y, label, key)
     end
 
     local function draw_slider(sid, x, y, w, label, key, min_val, max_val, fmt)
-        local cur_val = get_val(key, min_val) or min_val
+        local cur_val = get_val(key, min_val)
+        if type(cur_val) ~= "number" then cur_val = min_val end
         draw.Text(x, y, label, theme_dim, 13)
 
         local val_str = string.format(fmt or "%.1f", cur_val)
@@ -4988,6 +5046,8 @@ local function draw_checkbox(x, y, label, key)
         draw_color_palette(col2_x + 12, py + 278, 212, "b_silent_fov", function(c)
             cfg.sil_fov_c = c
         end)
+        draw_checkbox(col2_x + 12, py + 370, "No Recoil", "b_no_recoil")
+        draw_slider("s_recoil_reduc", col2_x + 12, py + 396, 212, "Recoil Reduction", "b_recoil_reduc", 0, 100, "%d %%")
 
         local col3_x = px + 566
         draw_card(col3_x, py + 30, 240, 481, "NPC Aimbot")
