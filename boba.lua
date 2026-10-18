@@ -5780,17 +5780,23 @@ do
         if h then
             return h
         end
-        local url = "https://raw.githubusercontent.com/boqnpenev1-design/delta-itemss/main/" .. icon_name .. ".png?rev=" .. img_rev
+        local url = "https://cdn.jsdelivr.net/gh/boqnpenev1-design/delta-itemss@main/" .. icon_name .. ".png"
         local ok, ret = pcall(draw.LoadImage, url)
         if ok and ret then
             img_handles[icon_name] = ret
             return ret
         end
-        local fb_url = "http://127.0.0.1:28751/" .. icon_name .. ".png?rev=" .. img_rev
+        local fb_url = "https://raw.githubusercontent.com/boqnpenev1-design/delta-itemss/main/" .. icon_name .. ".png"
         local ok2, ret2 = pcall(draw.LoadImage, fb_url)
         if ok2 and ret2 then
             img_handles[icon_name] = ret2
             return ret2
+        end
+        local local_url = "http://127.0.0.1:28751/" .. icon_name .. ".png"
+        local ok3, ret3 = pcall(draw.LoadImage, local_url)
+        if ok3 and ret3 then
+            img_handles[icon_name] = ret3
+            return ret3
         end
         return nil
     end
@@ -6145,23 +6151,22 @@ do
             draw.Rect(sx, sy, slot_sz, slot_sz, {0.20, 0.20, 0.26, 0.6}, 3, 1)
             if iname then
                 local h = get_icon(iname)
-                local drawn = false
                 if h then
                     local pad = 6
                     local max_w = slot_sz - pad
                     local max_h = slot_sz - pad
+                    local w_px = max_w
+                    local h_px = max_h
                     local ok_sz, rw, rh = pcall(draw.ImageSize, h)
                     if ok_sz and type(rw) == "number" and type(rh) == "number" and rw > 0 and rh > 0 then
                         local sc = math.min(max_w / rw, max_h / rh)
-                        local w_px = math.max(1, math.floor(rw * sc))
-                        local h_px = math.max(1, math.floor(rh * sc))
-                        local dx = sx + math.floor((slot_sz - w_px) / 2)
-                        local dy = sy + math.floor((slot_sz - h_px) / 2)
-                        pcall(draw.Image, h, dx, dy, w_px, h_px, 255, 255, 255, 255)
-                        drawn = true
+                        w_px = math.max(1, math.floor(rw * sc))
+                        h_px = math.max(1, math.floor(rh * sc))
                     end
-                end
-                if not drawn then
+                    local dx = sx + math.floor((slot_sz - w_px) / 2)
+                    local dy = sy + math.floor((slot_sz - h_px) / 2)
+                    pcall(draw.Image, h, dx, dy, w_px, h_px, 255, 255, 255, 255)
+                else
                     local s_txt = iname
                     if #s_txt > 6 then s_txt = s_txt:sub(1, 5) end
                     local tw, _ = draw.GetTextSize(s_txt, 9)
@@ -6201,23 +6206,22 @@ do
 
             if iname then
                 local h = get_icon(iname)
-                local drawn = false
                 if h then
                     local pad = 6
                     local max_w = slot_sz - pad
                     local max_h = slot_sz - pad
+                    local w_px = max_w
+                    local h_px = max_h
                     local ok_sz, rw, rh = pcall(draw.ImageSize, h)
                     if ok_sz and type(rw) == "number" and type(rh) == "number" and rw > 0 and rh > 0 then
                         local sc = math.min(max_w / rw, max_h / rh)
-                        local w_px = math.max(1, math.floor(rw * sc))
-                        local h_px = math.max(1, math.floor(rh * sc))
-                        local dx = sx + math.floor((slot_sz - w_px) / 2)
-                        local dy = sy + math.floor((slot_sz - h_px) / 2)
-                        pcall(draw.Image, h, dx, dy, w_px, h_px, 255, 255, 255, 255)
-                        drawn = true
+                        w_px = math.max(1, math.floor(rw * sc))
+                        h_px = math.max(1, math.floor(rh * sc))
                     end
-                end
-                if not drawn then
+                    local dx = sx + math.floor((slot_sz - w_px) / 2)
+                    local dy = sy + math.floor((slot_sz - h_px) / 2)
+                    pcall(draw.Image, h, dx, dy, w_px, h_px, 255, 255, 255, 255)
+                else
                     local s_txt = iname
                     if #s_txt > 6 then s_txt = s_txt:sub(1, 5) end
                     local tw, _ = draw.GetTextSize(s_txt, 9)
