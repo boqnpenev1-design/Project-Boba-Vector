@@ -1,5 +1,5 @@
 
-local save_config, load_config, apply_skins_now, auto_apply_skins
+local save_config, load_config, apply_skins_now, auto_apply_skins, is_gun_equipped
 
 if type(tick) ~= "function" then
     tick = function()
@@ -104,6 +104,12 @@ local boba_store = {
     b_hazard = false,
     b_hazard_range = 1500,
     b_nograss = false,
+    b_remove_foliage = false,
+    b_bullet_tracers = false,
+    b_bullet_tracers_c = {0.25, 0.65, 1.0, 1.0},
+    b_tracer_duration = 1.0,
+    b_hit_logs = false,
+    b_hit_log_duration = 4.0,
 
     b_wm = false,
     b_cross = false,
@@ -133,7 +139,6 @@ local boba_store = {
     b_car = false,
     b_car_range = 500,
     b_boss = false,
-    b_slf = false,
     b_mod_alert = false,
     b_mod_mode = 1,
     b_cheater_finder = false,
@@ -282,8 +287,7 @@ local GRAY  = {0.6, 0.6, 0.6, 1}
 local WHITE = {1, 1, 1, 1}
 local RED   = {1, 0.2, 0.2, 1}
 local GREEN = {0.2, 1, 0.2, 1}
-local CYAN  = {0, 0.9, 1, 1}
-local MAGENTA = {1, 0.2, 1, 1}
+-- (colors packed)
 
 local M_PER_STUD = 0.28
 local STUDS_PER_M = 1 / 0.28
@@ -304,8 +308,7 @@ local WEAPON_CALIBER = {
 ["MK23"]="45super", ["RPG7"]="127x108", ["Groza"]="762x39",
 ["VZ61"]="9x19", ["TT33"]="9x18",
 }
-local GRAVITY_STUDS = 80.0
-local GRAVITY_MS2 = GRAVITY_STUDS * M_PER_STUD
+local GRAVITY_MS2 = 80.0 * 0.28
 
 local function get_bullet_speed(weapon_name)
 if not weapon_name or weapon_name == "" then return 715 end
@@ -324,7 +327,9 @@ end
 
 local CAR_NAMES = {
 "uaz", "vaz", "vaz2108", "niva", "lada", "kamaz", "gaz", "zil",
-"truck", "jeep", "vehicle",
+"truck", "jeep", "vehicle", "car", "buggy", "btr", "tank", "boat",
+"sedan", "suv", "motorcycle", "bike", "quad", "atv", "heli", "helicopter",
+"plane", "bmp", "tigr", "ural", "tractor", "van", "bus", "apc", "carspawner"
 }
 local function is_car_name(name)
 if not name then return false end
@@ -532,7 +537,17 @@ local world = {
 npcs = {}, containers = {}, items = {},
 corpses = {}, quests = {}, players = {},
 extracts = {}, hazards = {},
-cam = nil
+cam = nil,
+hacker_tracker = {},
+foliage_orig = {},
+grass_orig = {},
+foliage_done = false,
+enemy_health = {},
+enemy_last_pos = {},
+hitmarker = nil,
+tracers = {},
+hit_logs = {},
+last_shot = 0
 }
 
 local cfg = {}
@@ -554,15 +569,7 @@ local function is_any_menu_open()
             end
         end
     end)
-    if v_open then return true end
-    pcall(function()
-        if input then
-            if type(input.IsCursorVisible) == "function" and input.IsCursorVisible() then v_open = true
-            elseif type(input.GetCursorVisible) == "function" and input.GetCursorVisible() then v_open = true
-            end
-        end
-    end)
-    return v_open or false
+    return v_open
 end
 
 wm_x, wm_y = 10, 10
@@ -573,25 +580,23 @@ inv_drag = false
 inv_dx, inv_dy = 0, 0
 inv_target = nil
 inv_target_data = nil
-local cached_heads = {}
+cached_heads = {}
 local frame_players = {}
 
-local world_cars = {}
+world_cars = {}
 
-local world_claymores = {}
+world_claymores = {}
 
-local RADAR_POS = { x = 20, y = 100 }
+-- (unused vars removed)
+aim_target_ent = nil
 
-local hitmarker_time = 0
-local aim_target_ent = nil
-
-local locked_target = nil
-local lock_was_down = false
+locked_target = nil
+lock_was_down = false
 
 boss_x, boss_y = 5, 370
 boss_drag, boss_dx, boss_dy = false, 0, 0
-local boss_data = {}
-local vehicle_data = {}
+boss_data = {}
+vehicle_data = {}
 local BOSS_DEFS = {
 { zone = "Sawmill",    name = "Anton"    },
 { zone = "Factory",    name = "Dozer"    },
@@ -604,16 +609,12 @@ local VEHICLE_DEFS = {
 { name = "BTR80", label = "BTR-80"       },
 }
 
-slf_x, slf_y = 20, 200
-slf_drag, slf_dx, slf_dy = false, 0, 0
-local slf_results = {}
-local SLF_ITEMS = {
-"GPU", "Gold50g", "SPSh44", "FlareGun", "Mag556Rnd100",
-"SOCOM556", "Reapir", "HSPV", "TitanShield",
-}
+cheater_x, cheater_y = 320, 120
+cheater_drag, cheater_dx, cheater_dy = false, 0, 0
+avatar_cache = {}
 
 
-local detected_mods = {}
+detected_mods = {}
 local MOD_NAMES = {
 ["solter"]=true,["kupczakk"]=true,["nutsock112"]=true,["thecrafter103"]=true,
 ["forkycheck"]=true,["necanwx"]=true,["kbhgaming480"]=true,["lumivoxi"]=true,
@@ -672,9 +673,7 @@ end
 
 local RS = game.ReplicatedStorage
 local weapons = RS and RS:FindFirstChild("RangedWeapons")
-local recoil_enabled = false
-local originals = {}
-local reduction = 0.3
+local recoil_state = { enabled = false, originals = {}, reduction = 0.3 }
 
 local function apply_recoil()
     if not weapons or not utility.IsValid(weapons) then
@@ -683,20 +682,21 @@ local function apply_recoil()
     end
     for _, weapon in ipairs(weapons:GetChildren()) do
         if not utility.IsValid(weapon) then goto continue end
-        local recoil = weapon:FindFirstChild("RecoilPattern")
-        if not recoil then goto continue end
-        for _, pattern in ipairs(recoil:GetChildren()) do
+        local pat_folder = weapon:FindFirstChild("RecoilPattern")
+        if not pat_folder then goto continue end
+        for _, pattern in ipairs(pat_folder:GetChildren()) do
             if not utility.IsValid(pattern) then goto continue2 end
             for _, v in ipairs(pattern:GetChildren()) do
                 if utility.IsValid(v) and v.Value ~= nil then
-                    if recoil_enabled then
-                        if not originals[v.Address] then
-                            originals[v.Address] = v.Value
+                    local addr = v.Address or tostring(v)
+                    if recoil_state.enabled then
+                        if not recoil_state.originals[addr] then
+                            recoil_state.originals[addr] = v.Value
                         end
-                        v.Value = originals[v.Address] * reduction
-                    elseif originals[v.Address] then
-                        v.Value = originals[v.Address]
-                        originals[v.Address] = nil
+                        v.Value = recoil_state.originals[addr] * recoil_state.reduction
+                    elseif recoil_state.originals[addr] then
+                        v.Value = recoil_state.originals[addr]
+                        recoil_state.originals[addr] = nil
                     end
                 end
             end
@@ -731,14 +731,14 @@ local function set_val(id, val)
     elseif id == "b_silent_fov_filled" then cfg.sil_fov_filled = val
     elseif id == "b_no_recoil" then
         cfg.no_recoil = val
-        recoil_enabled = (val == true)
-        apply_recoil()
+        recoil_state.enabled = (val == true)
+        pcall(apply_recoil)
     elseif id == "b_recoil_reduc" then
         cfg.recoil_reduc = val
         local pct = (type(val) == "number" and val) or 70
-        reduction = math.max(0, math.min(1, (100 - pct) / 100))
-        if recoil_enabled then
-            apply_recoil()
+        recoil_state.reduction = math.max(0, math.min(1, (100 - pct) / 100))
+        if recoil_state.enabled then
+            pcall(apply_recoil)
         end
     elseif id == "b_npc_aim" then cfg.npc_aim = val
     elseif id == "b_npc_aim_fov" then cfg.na_fov = val
@@ -747,6 +747,7 @@ local function set_val(id, val)
     elseif id == "b_npc_aim_fov_draw" then cfg.na_draw = val
     elseif id == "b_npc_aim_fov_filled" then cfg.na_fov_filled = val
     elseif id == "b_esp" then cfg.esp = val
+    elseif id == "b_esp_style" then cfg.esp_style = val
     elseif id == "b_esp_box" then cfg.esp_box = val
     elseif id == "b_esp_skel" then cfg.esp_skel = val
     elseif id == "b_esp_hp" then cfg.esp_hp = val
@@ -756,20 +757,28 @@ local function set_val(id, val)
     elseif id == "b_esp_weapon" then cfg.esp_wep = val
     elseif id == "b_esp_snap" then cfg.esp_snap = val
     elseif id == "b_esp_range" then cfg.esp_range = val
+    elseif id == "b_esp_team" then cfg.esp_team = val
+    elseif id == "b_esp_staff" then cfg.esp_staff = val
+    elseif id == "b_esp_armor" then cfg.esp_armor = val
+    elseif id == "b_esp_hvt" then cfg.esp_hvt = val
     elseif id == "b_esp_vis_tag" then cfg.esp_vis_tag = val
     elseif id == "b_loadout_esp" then cfg.loadout_esp = val
     elseif id == "b_loadout_sz" then cfg.loadout_sz = val
     elseif id == "b_loadout_x" then cfg.loadout_x = val
     elseif id == "b_loadout_y" then cfg.loadout_y = val
     elseif id == "b_chams" then cfg.chams = val
+    elseif id == "b_chams_mode" then cfg.chams_m = val
     elseif id == "b_chams_vc" then cfg.chams_vis = val
+    elseif id == "b_wep_chams" then cfg.wep_chams = val
+    elseif id == "b_wep_chams_style" then cfg.wep_chams_style = val
+    elseif id == "b_wep_chams_pulse" then cfg.wep_chams_pulse = val
     elseif id == "b_npc" then cfg.npc = val
     elseif id == "b_npc_box" then cfg.npc_box = val
     elseif id == "b_npc_hp" then cfg.npc_hp = val
     elseif id == "b_npc_name" then cfg.npc_name = val
     elseif id == "b_npc_skel" then cfg.npc_skel = val
     elseif id == "b_npc_range" then cfg.npc_range = val
-    elseif id == "b_extract" then cfg.extract = val
+    elseif id == "b_extract" then cfg.extract = val; if val and scan_extracts then pcall(scan_extracts) end
     elseif id == "b_extract_range" then cfg.extract_r = val
     elseif id == "b_hazard" then cfg.hazard = val
     elseif id == "b_hazard_range" then cfg.hazard_r = val
@@ -777,7 +786,56 @@ local function set_val(id, val)
     elseif id == "b_cont_items" then cfg.cont_items = val
     elseif id == "b_cont_range" then cfg.cont_range = val
     elseif id == "b_cont_filter" then cfg.cont_filter = val
+    elseif id == "b_loot" then cfg.loot = val; if val and scan_world_items then pcall(scan_world_items) end
+    elseif id == "b_loot_range" then cfg.loot_range = val
+    elseif id == "b_loot_filter" then cfg.loot_f = val
+    elseif id == "b_corpse" then cfg.corpse = val
+    elseif id == "b_corpse_items" then cfg.corpse_i = val
+    elseif id == "b_corpse_range" then cfg.corpse_r = val
+    elseif id == "b_corpse_x" then cfg.corpse_x = val
+    elseif id == "b_quest" then cfg.quest = val; if val and scan_quests then pcall(scan_quests) end
+    elseif id == "b_quest_range" then cfg.quest_r = val
     elseif id == "b_cheater_finder" then cfg.cheater_finder = val
+    elseif id == "b_remove_foliage" then cfg.remove_foliage = val; pcall(apply_foliage_mods)
+    elseif id == "b_nograss" then cfg.nograss = val; pcall(apply_world_mods)
+    elseif id == "b_bullet_tracers" then cfg.bullet_tracers = val
+    elseif id == "b_tracer_duration" then cfg.tracer_dur = val
+    elseif id == "b_hitmarker" then cfg.hitmarker = val
+    elseif id == "b_hit_logs" then cfg.hit_logs = val
+    elseif id == "b_hit_log_duration" then cfg.hit_log_dur = val
+    elseif id == "b_cross" then cfg.cross = val
+    elseif id == "b_cross_style" then cfg.cross_style = val
+    elseif id == "b_cross_sz" then cfg.cross_sz = val
+    elseif id == "b_cross_gap" then cfg.cross_gap = val
+    elseif id == "b_cross_thick" then cfg.cross_thick = val
+    elseif id == "b_cross_spin" then cfg.cross_spin = val
+    elseif id == "b_cross_spin_spd" then cfg.cross_spin_spd = val
+    elseif id == "b_cross_pulse" then cfg.cross_pulse = val
+    elseif id == "b_cross_pulse_spd" then cfg.cross_pulse_spd = val
+    elseif id == "b_fov_changer" then cfg.fov_changer = val
+    elseif id == "b_fov_val" then cfg.fov_val = val
+    elseif id == "b_fov_ads_safe" then cfg.fov_ads_safe = val
+    elseif id == "b_inspect" then cfg.inspect = val
+    elseif id == "b_inv_weap" then cfg.inv_weap = val
+    elseif id == "b_inv_armor" then cfg.inv_armor = val
+    elseif id == "b_inv_special" then cfg.inv_special = val
+    elseif id == "b_inv_misc" then cfg.inv_misc = val
+    elseif id == "b_boss" then cfg.boss = val
+    elseif id == "b_mod_alert" then cfg.mod_alert = val
+    elseif id == "b_car" then cfg.car = val; if val and scan_cars then pcall(scan_cars) end
+    elseif id == "b_car_range" then cfg.car_r = val
+    elseif id == "b_claymore" then cfg.claymore = val
+    elseif id == "b_claymore_names" then cfg.clay_names = val
+    elseif id == "b_claymore_range" then cfg.clay_r = val
+    elseif id == "b_radar" then cfg.radar = val
+    elseif id == "b_radar_range" then cfg.radar_range = val
+    elseif id == "b_radar_sz" then cfg.radar_sz = val
+    elseif id == "b_radar_rot" then cfg.radar_rot = val
+    elseif id == "b_skin_enable" then cfg.skin_enable = val
+    elseif id == "b_skin_knife" then cfg.skin_knife = val
+    elseif id == "b_skin_gun" then cfg.skin_gun = val
+    elseif id == "b_skin_armor" then cfg.skin_armor = val
+    elseif id == "b_wm" then cfg.wm = val
     elseif id == "b_menu_key" then cfg.menu_key = val
     elseif id == "b_menu_theme" then cfg.menu_theme = val
     elseif id == "b_hard_side" then cfg.hard_side = val
@@ -886,31 +944,61 @@ local function check_player_visible(cam_pos, p)
     return false
 end
 
-local cached_ammo_lbl = nil
-local last_ammo_lbl_check = 0
+cached_ammo_lbl = nil
+last_ammo_lbl_check = 0
 
 local function get_local_ammo()
+    if is_gun_equipped and not is_gun_equipped() then
+        return nil
+    end
+
     local now = utility.GetTickCount()
-    if not cached_ammo_lbl or (now - last_ammo_lbl_check) > 1000 then
+    if not cached_ammo_lbl or not utility.IsValid(cached_ammo_lbl) or (now - last_ammo_lbl_check) > 300 then
         last_ammo_lbl_check = now
         cached_ammo_lbl = nil
         pcall(function()
-            local lp = game.Players.LocalPlayer
+            local lp = game.LocalPlayer or (game.Players and game.Players.LocalPlayer)
             local pg = lp and lp:FindFirstChild("PlayerGui")
             local mg = pg and (pg:FindFirstChild("MainGui") or pg:FindFirstChild("NoInsetGui"))
-            local mf = mg and mg:FindFirstChild("MainFrame")
-            local inf = mf and mf:FindFirstChild("InteractionFrame")
-            local eq = inf and inf:FindFirstChild("EquippedItem")
-            local fr = eq and eq:FindFirstChild("Frame")
-            cached_ammo_lbl = fr and fr:FindFirstChild("Ammo")
+            if mg then
+                cached_ammo_lbl = mg:FindFirstChild("Ammo", true)
+            end
         end)
     end
-    if cached_ammo_lbl then
+    if cached_ammo_lbl and utility.IsValid(cached_ammo_lbl) then
         local ok, txt = pcall(function() return cached_ammo_lbl.Text end)
-        if ok and txt then
+        if ok and txt and txt ~= "" then
+            local low = txt:lower()
+            if low:find("empty") or txt == "-" .. "-" then
+                return 0
+            end
             local cur = txt:match("^(%d+)")
-            if cur then return tonumber(cur) end
+            if cur then
+                return tonumber(cur)
+            end
         end
+    end
+
+    local rep_ammo = nil
+    pcall(function()
+        local rep = game.ReplicatedStorage
+        local lp = game.LocalPlayer or (game.Players and game.Players.LocalPlayer)
+        if rep and lp and lp.Name then
+            local p_data = rep:FindFirstChild("Players") and rep.Players:FindFirstChild(lp.Name)
+            local status = p_data and p_data:FindFirstChild("Status")
+            local gv = status and status:FindFirstChild("GameplayVariables")
+            local eq = gv and gv:FindFirstChild("EquippedTool")
+            if eq and eq.Value and utility.IsValid(eq.Value) then
+                local item_props = eq.Value:FindFirstChild("ItemProperties") or eq.Value
+                local loaded_ammo = item_props and item_props:FindFirstChild("LoadedAmmo")
+                if loaded_ammo then
+                    rep_ammo = #loaded_ammo:GetChildren()
+                end
+            end
+        end
+    end)
+    if rep_ammo ~= nil then
+        return rep_ammo
     end
     return nil
 end
@@ -927,7 +1015,7 @@ local CFG_IDS = {
 "b_corpse","b_corpse_items","b_corpse_range",
 "b_quest","b_quest_range",
 "b_extract","b_extract_range","b_hazard","b_hazard_range",
-"b_nograss",
+"b_nograss","b_remove_foliage","b_bullet_tracers","b_tracer_duration","b_hit_logs","b_hit_log_duration",
 "b_aim","b_aim_key","b_npc_aim_key","b_aim_fov","b_aim_smooth","b_aim_bone","b_aim_vis_text","b_aim_pred",
 "b_aim_lead","b_aim_lock",
 "b_aim_vis","b_aim_team","b_aim_fov_draw","b_aim_fov_filled",
@@ -941,14 +1029,14 @@ local CFG_IDS = {
 "b_car","b_car_range",
 "b_radar","b_radar_sz","b_radar_range","b_radar_rot",
 "b_hitmarker","b_corpse_x",
-"b_boss","b_slf","b_mod_alert","b_mod_mode","b_cheater_finder",
+"b_boss","b_mod_alert","b_mod_mode","b_cheater_finder",
 "b_skin_enable","b_skin_knife","b_skin_gun","b_skin_armor",
 "b_fov_changer","b_fov_val","b_fov_ads_safe",
 "b_menu_key","b_menu_theme","b_hard_side","b_rainbow_mode"
 }
 
 local COLOR_IDS = {
-"b_esp_box","b_esp_skel","b_esp_name","b_esp_snap","b_esp_staff","b_esp_hvt",
+"b_bullet_tracers","b_esp_box","b_esp_skel","b_esp_name","b_esp_snap","b_esp_staff","b_esp_hvt",
 "b_chams_vis","b_chams_occ","b_wep_chams",
 "b_npc_box","b_npc_name","b_npc_skel",
 "b_cont","b_loot","b_corpse","b_quest","b_extract","b_hazard",
@@ -1076,6 +1164,9 @@ for _, id in ipairs(COLOR_IDS) do
             c[1] or 1, c[2] or 1, c[3] or 1, c[4] or 1) .. string.char(10))
     end
 end
+-- Save cheater panel position
+f:write("cheater_panel_x=" .. tostring(math.floor(cheater_x or 320)) .. string.char(10))
+f:write("cheater_panel_y=" .. tostring(math.floor(cheater_y or 120)) .. string.char(10))
 f:flush()
 f:close()
 
@@ -1098,6 +1189,8 @@ if name == "default" then
                     c[1] or 1, c[2] or 1, c[3] or 1, c[4] or 1) .. string.char(10))
             end
         end
+        alt_f:write("cheater_panel_x=" .. tostring(math.floor(cheater_x or 320)) .. string.char(10))
+        alt_f:write("cheater_panel_y=" .. tostring(math.floor(cheater_y or 120)) .. string.char(10))
         alt_f:flush()
         alt_f:close()
     end
@@ -1175,6 +1268,15 @@ for _, id in ipairs(COLOR_IDS) do
             end
         end
     end
+end
+-- Load cheater panel position
+if data["cheater_panel_x"] then
+    local cx = tonumber(data["cheater_panel_x"])
+    if cx then cheater_x = cx end
+end
+if data["cheater_panel_y"] then
+    local cy = tonumber(data["cheater_panel_y"])
+    if cy then cheater_y = cy end
 end
 write_active_cfg(name)
 notify.Success("Config loaded", name)
@@ -1476,7 +1578,7 @@ end
 world.quests = result
 end
 
-local longshot_kills = {}
+longshot_kills = {}
 
 local function parse_kill_message(msg)
 if not msg or type(msg) ~= "string" or msg == "" then return end
@@ -1536,7 +1638,16 @@ if p and p.IsValid and p.IsAlive then
     local inv = {}
     local equipped = nil
     local kd = 0
+    local hours = 0
+    local acct_age = -1
+    local ls_kills = longshot_kills[pname] or 0
     local is_cheater = false
+    pcall(function()
+        local rblx_player = p.Player or game.Players:FindFirstChild(pname)
+        if rblx_player and rblx_player.AccountAge then
+            acct_age = rblx_player.AccountAge
+        end
+    end)
     if rep_p then
         local data = rep_p:FindFirstChild(pname)
         if data then
@@ -1561,9 +1672,14 @@ if p and p.IsValid and p.IsAlive then
                     end
                 end
             end
-            local ws_f = data:FindFirstChild("WipeStatistics") or data:FindFirstChild("Statistics")
-            if not ws_f and st then
-                ws_f = st:FindFirstChild("WipeStatistics") or st:FindFirstChild("Statistics")
+            local jn = (st and st:FindFirstChild("Journey")) or data:FindFirstChild("Journey")
+            local ws_f = (jn and (jn:FindFirstChild("WipeStatistics") or jn:FindFirstChild("Statistics")))
+                or (st and (st:FindFirstChild("WipeStatistics") or st:FindFirstChild("Statistics")))
+                or data:FindFirstChild("WipeStatistics") or data:FindFirstChild("Statistics")
+            if not ws_f then
+                pcall(function()
+                    ws_f = data:FindFirstChild("WipeStatistics", true) or data:FindFirstChild("Statistics", true)
+                end)
             end
             if ws_f then
                 local pvp_kdr = ws_f:FindFirstChild("PVPKDR") or ws_f:FindFirstChild("KDR") or ws_f:FindFirstChild("KD")
@@ -1578,31 +1694,68 @@ if p and p.IsValid and p.IsAlive then
                         kd = k_n / math.max(1, d_n)
                     end
                 end
+                local tp = ws_f:FindFirstChild("TimePlayed") or ws_f:FindFirstChild("Playtime")
+                if tp and tp.Value and tonumber(tp.Value) then
+                    local secs = tonumber(tp.Value)
+                    hours = secs > 500 and math.floor(secs / 3600) or math.floor(secs)
+                end
             end
-        end
-    end
-    if kd == 0 then
-        local pl = game.Players:FindFirstChild(pname)
-        if pl then
-            local ls = pl:FindFirstChild("leaderstats")
-            if ls then
-                local pvp_kdr = ls:FindFirstChild("PVPKDR") or ls:FindFirstChild("KDR") or ls:FindFirstChild("KD")
-                if pvp_kdr and pvp_kdr.Value and tonumber(pvp_kdr.Value) then
-                    kd = tonumber(pvp_kdr.Value)
-                else
-                    local pk = ls:FindFirstChild("PVPKills") or ls:FindFirstChild("Kills")
-                    local pd = ls:FindFirstChild("Deaths")
-                    local k_n = pk and pk.Value and tonumber(pk.Value) or 0
-                    local d_n = pd and pd.Value and tonumber(pd.Value) or 0
-                    if k_n > 0 or d_n > 0 then
-                        kd = k_n / math.max(1, d_n)
+            local ov_f = (jn and jn:FindFirstChild("Statistics")) or (st and st:FindFirstChild("Statistics")) or data:FindFirstChild("Statistics")
+            if ov_f and ov_f ~= ws_f then
+                if kd == 0 then
+                    local pvp_kdr = ov_f:FindFirstChild("PVPKDR") or ov_f:FindFirstChild("KDR") or ov_f:FindFirstChild("KD")
+                    if pvp_kdr and pvp_kdr.Value and tonumber(pvp_kdr.Value) then
+                        kd = tonumber(pvp_kdr.Value)
+                    else
+                        local pk = ov_f:FindFirstChild("PVPKills") or ov_f:FindFirstChild("Kills")
+                        local pd = ov_f:FindFirstChild("Deaths")
+                        local k_n = pk and pk.Value and tonumber(pk.Value) or 0
+                        local d_n = pd and pd.Value and tonumber(pd.Value) or 0
+                        if k_n > 0 or d_n > 0 then
+                            kd = k_n / math.max(1, d_n)
+                        end
+                    end
+                end
+                if hours == 0 then
+                    local tp = ov_f:FindFirstChild("TimePlayed") or ov_f:FindFirstChild("Playtime")
+                    if tp and tp.Value and tonumber(tp.Value) then
+                        local secs = tonumber(tp.Value)
+                        hours = secs > 500 and math.floor(secs / 3600) or math.floor(secs)
                     end
                 end
             end
         end
     end
-    local ls_kills = longshot_kills[pname] or 0
-    if kd >= 1.5 or ls_kills >= 5 then
+    if kd == 0 or hours == 0 then
+        local pl = game.Players:FindFirstChild(pname)
+        if pl then
+            local ls = pl:FindFirstChild("leaderstats")
+            if ls then
+                if kd == 0 then
+                    local pvp_kdr = ls:FindFirstChild("PVPKDR") or ls:FindFirstChild("KDR") or ls:FindFirstChild("KD")
+                    if pvp_kdr and pvp_kdr.Value and tonumber(pvp_kdr.Value) then
+                        kd = tonumber(pvp_kdr.Value)
+                    else
+                        local pk = ls:FindFirstChild("PVPKills") or ls:FindFirstChild("Kills")
+                        local pd = ls:FindFirstChild("Deaths")
+                        local k_n = pk and pk.Value and tonumber(pk.Value) or 0
+                        local d_n = pd and pd.Value and tonumber(pd.Value) or 0
+                        if k_n > 0 or d_n > 0 then
+                            kd = k_n / math.max(1, d_n)
+                        end
+                    end
+                end
+                if hours == 0 then
+                    local tp = ls:FindFirstChild("TimePlayed") or ls:FindFirstChild("Hours") or ls:FindFirstChild("Playtime")
+                    if tp and tp.Value and tonumber(tp.Value) then
+                        local secs = tonumber(tp.Value)
+                        hours = secs > 500 and math.floor(secs / 3600) or math.floor(secs)
+                    end
+                end
+            end
+        end
+    end
+    if world.hacker_tracker[pname] and world.hacker_tracker[pname].is_speeding then
         is_cheater = true
     end
     local head_ref = nil
@@ -1643,7 +1796,7 @@ if p and p.IsValid and p.IsAlive then
         display = p.DisplayName or pname,
         entity = p, inventory = inv, equipped = equipped,
         head = head_ref, helmet = helmet, vest = vest, hvt = hvt,
-        kd = kd, is_cheater = is_cheater
+        kd = kd, hours = hours, acct_age = acct_age, ls_kills = ls_kills, is_cheater = is_cheater
     }
 end
 end
@@ -1657,67 +1810,114 @@ world.players = result
 end
 
 local function scan_extracts()
-if world.extracts and #world.extracts > 0 then return end
 local result = {}
 local ws = game.Workspace
 if not ws then world.extracts = result; return end
 
 local seen = {}
-local function try_add(obj)
+local function try_add(obj, custom_name)
     if not obj or seen[obj] then return end
-    seen[obj] = true
-    local part
+    local part = nil
     if obj:IsA("BasePart") then
         part = obj
-    elseif obj.ClassName == "Model" then
-        part = get_root(obj)
+    elseif obj:IsA("Model") then
+        part = obj.PrimaryPart or obj:FindFirstChild("Zone") or obj:FindFirstChild("Trigger") or obj:FindFirstChild("Part") or obj:FindFirstChildOfClass("BasePart")
+    elseif obj:IsA("Folder") or obj:IsA("Configuration") then
+        part = obj:FindFirstChildOfClass("BasePart") or (obj:FindFirstChild("Part") and obj.Part:IsA("BasePart") and obj.Part)
     end
-    if part then
-        result[#result+1] = { name = obj.Name, part = part }
+    if part and part.Position then
+        seen[obj] = true
+        seen[part] = true
+        local dname = custom_name or obj.Name
+        local low_dn = dname:lower()
+        if low_dn == "part" or low_dn == "zone" or low_dn == "trigger" or low_dn == "hitbox" or low_dn == "root" then
+            if obj.Parent and obj.Parent ~= ws then
+                dname = obj.Parent.Name
+            end
+        end
+        result[#result+1] = { name = dname, part = part }
     end
 end
 
 local function name_is_extract(n)
+    if not n then return false end
     local lo = n:lower()
-    return lo:find("extract") or lo:find("exfil") or lo:find("exit")
-        or lo:find("evac") or lo:find("escape")
+    if lo:find("lamp") or lo:find("flare") or lo:find("light") or lo:find("crate") or lo:find("barrel") or lo:find("fence") or lo:find("post") or lo:find("sign") then
+        return false
+    end
+    return lo:find("extract") or lo:find("exfil") or lo:find("exit") or lo:find("evac")
 end
 
+-- 1. Check NoCollision
 local nocoll = ws:FindFirstChild("NoCollision")
 if nocoll then
-    local exits = nocoll:FindFirstChild("ExitLocations")
+    local exits = nocoll:FindFirstChild("ExitLocations") or nocoll:FindFirstChild("Exits") or nocoll:FindFirstChild("Extracts")
     if exits then
         local ech = exits:GetChildren()
         for i = 1, #ech do try_add(ech[i]) end
     end
+    local nch = nocoll:GetChildren()
+    for i = 1, #nch do
+        if name_is_extract(nch[i].Name) then
+            try_add(nch[i])
+            local sub = nch[i]:GetChildren()
+            for k = 1, #sub do try_add(sub[k], nch[i].Name) end
+        end
+    end
 end
 
+-- 2. Check search folders in Workspace
 local search_parents = {
     "ExitLocations", "Extracts", "Extraction", "ExitZones", "Exits", "Exfil",
-    "ExtractionPoints", "ExfilPoints", "Extractions"
+    "ExtractionPoints", "ExfilPoints", "Extractions", "ExtractionZones", "Zones"
 }
 for _, fname in ipairs(search_parents) do
     local folder = ws:FindFirstChild(fname)
     if folder then
         local ch = folder:GetChildren()
-        for i = 1, #ch do try_add(ch[i]) end
+        for i = 1, #ch do
+            try_add(ch[i])
+            if ch[i]:IsA("Model") or ch[i]:IsA("Folder") then
+                local sub = ch[i]:GetChildren()
+                for k = 1, #sub do try_add(sub[k], ch[i].Name) end
+            end
+        end
     end
 end
 
+-- 3. Check Map folder
 local map = ws:FindFirstChild("Map") or ws:FindFirstChild("map")
 if map then
     for _, fname in ipairs(search_parents) do
         local folder = map:FindFirstChild(fname)
         if folder then
             local ch = folder:GetChildren()
-            for i = 1, #ch do try_add(ch[i]) end
+            for i = 1, #ch do
+                try_add(ch[i])
+                if ch[i]:IsA("Model") or ch[i]:IsA("Folder") then
+                    local sub = ch[i]:GetChildren()
+                    for k = 1, #sub do try_add(sub[k], ch[i].Name) end
+                end
+            end
         end
     end
     local mch = map:GetChildren()
     for i = 1, #mch do
         if name_is_extract(mch[i].Name) then
             try_add(mch[i])
+            if mch[i]:IsA("Model") or mch[i]:IsA("Folder") then
+                local sub = mch[i]:GetChildren()
+                for k = 1, #sub do try_add(sub[k], mch[i].Name) end
+            end
         end
+    end
+end
+
+-- 4. Check top-level Workspace children
+local wch = ws:GetChildren()
+for i = 1, #wch do
+    if name_is_extract(wch[i].Name) then
+        try_add(wch[i])
     end
 end
 
@@ -1889,6 +2089,12 @@ cfg.hazard_r  = mg("b_hazard_range")
 cfg.loot_f    = mg("b_loot_filter")
 
 cfg.nograss   = mg("b_nograss")
+cfg.remove_foliage = mg("b_remove_foliage")
+cfg.bullet_tracers = mg("b_bullet_tracers")
+cfg.tracer_c        = mc("b_bullet_tracers") or {0.25, 0.65, 1.0, 1.0}
+cfg.tracer_dur      = mg("b_tracer_duration") or 1.0
+cfg.hit_logs       = mg("b_hit_logs")
+cfg.hit_log_dur    = mg("b_hit_log_duration") or 4.0
 
 cfg.claymore  = mg("b_claymore")
 cfg.clay_c    = mc("b_claymore")
@@ -1909,7 +2115,6 @@ cfg.corpse_x  = mg("b_corpse_x")
 cfg.corpse_xc = mc("b_corpse_x")
 
 cfg.boss      = mg("b_boss")
-cfg.slf       = mg("b_slf")
 cfg.mod_alert = mg("b_mod_alert")
 cfg.mod_mode  = mg("b_mod_mode")
 cfg.cheater_finder = mg("b_cheater_finder")
@@ -1930,7 +2135,7 @@ cfg.inv_misc  = mg("b_inv_misc")
 end
 
 
-local player_bounds_cache = {}
+player_bounds_cache = {}
 
 local function draw_esp_box(x, y, w, h, col)
     local c = col or {1, 1, 1, 1}
@@ -2143,9 +2348,11 @@ for i = 1, #players do
 
         local label_y = b.y - 2
         local p_data = p_data_map[p.Name]
-        if cfg.cheater_finder and p_data and p_data.is_cheater then
-            local ctxt = "CHEATER"
+        local is_hacker = (p_data and p_data.is_cheater) or (world.hacker_tracker[p.Name] and world.hacker_tracker[p.Name].is_speeding)
+        if cfg.cheater_finder and is_hacker then
+            local ctxt = "[SPEEDHACKER]"
             local ctw = draw.GetTextSize(ctxt, 12)
+            ctw = (type(ctw) == "number" and ctw > 0 and ctw) or 80
             label_y = label_y - 13
             draw.Text(mid - ctw * 0.5 + 1, label_y + 1, ctxt, {0, 0, 0, 0.95}, 12)
             draw.Text(mid - ctw * 0.5, label_y, ctxt, {1, 0.2, 0.2, 1}, 12)
@@ -2344,18 +2551,22 @@ end
 end
 
 local function draw_world_label(part, name, col, max_r, contents, show_items)
-if not part then return end
+if not part or not utility.IsValid(part) then return end
 local pos = part.Position
 if not pos then return end
 local cam = camera.GetPosition()
 if not cam then return end
 local dist = dist3(pos.X, pos.Y, pos.Z, cam.X, cam.Y, cam.Z)
-max_r = (type(max_r) == "number" and max_r) or 500
-if dist > max_r / 0.28 then return end
+max_r = (type(max_r) == "number" and max_r) or 3500
+if max_r > 0 and dist > (max_r / 0.28) then return end
 local sx, sy, vis = utility.WorldToScreen(pos.X, pos.Y, pos.Z)
+if not vis then
+    sx, sy, vis = draw.WorldToScreen(pos.X, pos.Y, pos.Z)
+end
 if not vis then return end
 local txt = format("%s [%dm]", name, floor(dist * 0.28))
 local tw = draw.GetTextSize(txt, 13)
+tw = (type(tw) == "number" and tw > 0 and tw) or (#txt * 7.5)
 col = (type(col) == "table" and col) or {0.2, 0.8, 1, 1}
 draw.Text(sx - tw*0.5, sy, txt, col, 13)
 if show_items and contents then
@@ -2375,21 +2586,30 @@ if cfg.cont then
 for i = 1, #world.containers do
     local c = world.containers[i]
     local items_to_show = c.contents
-    if cfg.cont_items and not items_to_show and c.model then
-        c.contents = get_inventory(c.model)
-        items_to_show = c.contents
+    if c.contents == nil and c.model then
+        c.contents = get_inventory(c.model) or false
+        items_to_show = (c.contents ~= false) and c.contents or nil
+    elseif c.contents == false then
+        items_to_show = nil
     end
-    if cfg.cont_items and items_to_show and cfg.cont_filter == 1 then
+
+    if cfg.cont_filter == 1 then
         local op_items = {}
-        for j = 1, #items_to_show do
-            if is_op_loot(items_to_show[j]) then
-                op_items[#op_items+1] = items_to_show[j]
+        if items_to_show then
+            for j = 1, #items_to_show do
+                if is_op_loot(items_to_show[j]) then
+                    op_items[#op_items+1] = items_to_show[j]
+                end
             end
         end
-        items_to_show = #op_items > 0 and op_items or nil
+        if #op_items > 0 then
+            draw_world_label(c.part, c.name, cfg.cont_c,
+                cfg.cont_range, op_items, true)
+        end
+    else
+        draw_world_label(c.part, c.name, cfg.cont_c,
+            cfg.cont_range, items_to_show, cfg.cont_items)
     end
-    draw_world_label(c.part, c.name, cfg.cont_c,
-        cfg.cont_range, items_to_show, cfg.cont_items)
 end
 end
 if cfg.loot then
@@ -2406,7 +2626,7 @@ end
 if cfg.corpse then
 for i = 1, #world.corpses do
     local c = world.corpses[i]
-    local label = "☠ " .. c.name
+    local label = "CORPSE: " .. c.name
     local corpse_items = c.contents
     if cfg.corpse_i and corpse_items then
         local good_c_items = {}
@@ -2424,14 +2644,14 @@ end
 if cfg.quest then
 for i = 1, #world.quests do
     local q = world.quests[i]
-    draw_world_label(q.part, "★ " .. q.name, cfg.quest_c,
+    draw_world_label(q.part, q.name, cfg.quest_c,
         cfg.quest_r, nil, false)
 end
 end
 if cfg.extract then
 for i = 1, #world.extracts do
     local e = world.extracts[i]
-    draw_world_label(e.part, "⬆ " .. e.name, cfg.extract_c,
+    draw_world_label(e.part, "Exit", cfg.extract_c,
         cfg.extract_r, nil, false)
 end
 end
@@ -2439,8 +2659,8 @@ if cfg.hazard and world.hazards then
 for i = 1, #world.hazards do
     local hz = world.hazards[i]
     local hz_col = hz.type == "rad" and {0.4, 1, 0.2, 0.9} or {1, 0.4, 0, 0.9}
-    local hz_icon = hz.type == "rad" and "☢ " or "♨ "
-    draw_world_label(hz.part, hz_icon .. hz.name, cfg.hazard_c or hz_col,
+    local hz_prefix = hz.type == "rad" and "RAD: " or "FIRE: "
+    draw_world_label(hz.part, hz_prefix .. hz.name, cfg.hazard_c or hz_col,
         cfg.hazard_r or 1500, nil, false)
 end
 end
@@ -2514,7 +2734,7 @@ local function get_player_bone_pos(p, bone_mode, scx, scy)
     return (head_pos or chest_pos or root_pos), (head_part or chest_part or root_part)
 end
 
-local get_bone_pos = get_player_bone_pos
+-- (alias removed)
 
 local function get_npc_target_bone(n, na_b)
     local parts = n.parts or {}
@@ -2813,17 +3033,18 @@ end
 local function run_npc_aim()
 end
 
-local sil_rot_idx = 1
-local sil_rot_order = { "Head", "UpperTorso", "LowerTorso" }
-local sil_was_lmb = false
+sil_rot_idx = 1
+-- (unused vars removed)
 
 local function run_silent_aim()
-    if not cfg.silent then
+    if not cfg.silent or not is_gun_equipped() then
         if silent_ok then
             pcall(raycast.ClearSilentTarget)
             pcall(raycast.DisableSilentHook)
             silent_ok = false
         end
+        world.silent_target_pos = nil
+        world.silent_target_key = nil
         return
     end
 
@@ -2845,13 +3066,10 @@ local function run_silent_aim()
 
     local lp = entity.GetLocalPlayer()
     if not lp then
-        raycast.ClearSilentTarget()
-        return
-    end
-
-    local origin = lp.HeadPosition or camera.GetPosition()
-    if not origin then
-        raycast.ClearSilentTarget()
+        pcall(raycast.ClearSilentTarget)
+        world.silent_target_pos = nil
+        world.silent_target_key = nil
+        world.silent_target_name = nil
         return
     end
 
@@ -2859,6 +3077,7 @@ local function run_silent_aim()
     local mode = get_val("b_silent_bone", 0) or 0
     local best_fov = cfg.sil_fov or 200
     local best_pos = nil
+    local best_ply = nil
 
     for i = 1, #players do
         local p = players[i]
@@ -2876,6 +3095,7 @@ local function run_silent_aim()
                         if fov < best_fov then
                             best_fov = fov
                             best_pos = bone_pos
+                            best_ply = p
                         end
                     end
                 end
@@ -2885,16 +3105,26 @@ local function run_silent_aim()
     end
 
     if best_pos then
+        world.silent_target_pos = best_pos
+        world.silent_target_time = os.clock()
+        world.silent_target_name = (best_ply and best_ply.Name) or "Player"
+        world.silent_target_key = best_ply and (best_ply.UserId or best_ply.Name)
+        world.silent_target_bone = mode
+    else
+        world.silent_target_pos = nil
+        world.silent_target_key = nil
+        world.silent_target_name = nil
+    end
+
+    local is_firing = input.IsKeyDown(0x01) and not is_any_menu_open()
+    local origin = lp.HeadPosition or camera.GetPosition()
+    if is_firing and best_pos and origin then
         local dir = best_pos - origin
         raycast.SetSilentTarget(origin, dir)
     else
-        raycast.ClearSilentTarget()
+        pcall(raycast.ClearSilentTarget)
     end
 end
-
-
-
-local ui_prev_visible = false
 
 
 
@@ -3299,60 +3529,272 @@ end
 
 
 local function save_originals()
-if orig_light then return end
-orig_light = {
-br = lighting.GetBrightness(),
-am = lighting.GetAmbient(),
-oa = lighting.GetOutdoorAmbient(),
-ex = lighting.GetExposure(),
-fs = lighting.GetFogStart(),
-fe = lighting.GetFogEnd(),
-ds = lighting.GetDiffuseScale(),
-ss = lighting.GetSpecularScale()
-}
-orig_grass = terrain.GetGrassLength()
+    if orig_light then return end
+    pcall(function()
+        orig_light = {
+            br = lighting.GetBrightness(),
+            am = lighting.GetAmbient(),
+            oa = lighting.GetOutdoorAmbient(),
+            ex = lighting.GetExposure(),
+            fs = lighting.GetFogStart(),
+            fe = lighting.GetFogEnd(),
+            ds = lighting.GetDiffuseScale(),
+            ss = lighting.GetSpecularScale()
+        }
+    end)
+    if terrain and terrain.GetGrassLength then
+        pcall(function() orig_grass = terrain.GetGrassLength() end)
+    end
+    pcall(function()
+        local ws = game.Workspace
+        local tr = ws and (ws.Terrain or ws:FindFirstChildOfClass("Terrain"))
+        if tr and world.orig_decor == nil then
+            world.orig_decor = tr.Decoration
+        end
+    end)
 end
 
 local function restore_originals()
-if orig_light then
-lighting.SetBrightness(orig_light.br)
-lighting.SetAmbient(orig_light.am)
-lighting.SetOutdoorAmbient(orig_light.oa)
-lighting.SetExposure(orig_light.ex)
-lighting.SetFogStart(orig_light.fs)
-lighting.SetFogEnd(orig_light.fe)
-lighting.SetDiffuseScale(orig_light.ds)
-lighting.SetSpecularScale(orig_light.ss)
-orig_light = nil
+    if orig_light then
+        pcall(function()
+            lighting.SetBrightness(orig_light.br)
+            lighting.SetAmbient(orig_light.am)
+            lighting.SetOutdoorAmbient(orig_light.oa)
+            lighting.SetExposure(orig_light.ex)
+            lighting.SetFogStart(orig_light.fs)
+            lighting.SetFogEnd(orig_light.fe)
+            lighting.SetDiffuseScale(orig_light.ds)
+            lighting.SetSpecularScale(orig_light.ss)
+        end)
+        orig_light = nil
+    end
+    if orig_grass and terrain and terrain.SetGrassLength then
+        pcall(function() terrain.SetGrassLength(orig_grass) end)
+        orig_grass = nil
+    end
+    if world.orig_decor ~= nil then
+        pcall(function()
+            local ws = game.Workspace
+            local tr = ws and (ws.Terrain or ws:FindFirstChildOfClass("Terrain"))
+            if tr then
+                pcall(function() sethiddenproperty(tr, "Decoration", world.orig_decor) end)
+                pcall(function() tr.Decoration = world.orig_decor end)
+            end
+        end)
+        world.orig_decor = nil
+    end
+    if world.grass_orig then
+        for part, origTr in pairs(world.grass_orig) do
+            pcall(function()
+                if part and part.Parent then part.Transparency = origTr end
+            end)
+        end
+        world.grass_orig = {}
+    end
 end
-if orig_grass then
-terrain.SetGrassLength(orig_grass)
-orig_grass = nil
-end
-end
+
+local last_applied_nograss = nil
+local last_applied_bright = nil
+local last_applied_nofog = nil
+local last_applied_noshadow = nil
+local last_applied_foliage = nil
 
 local function apply_world_mods()
-local any = mg("b_bright") or mg("b_nofog") or mg("b_noshadow") or mg("b_nograss")
-if any then save_originals() end
+    local cur_nograss = (cfg.nograss == true) or (mg("b_nograss") == true)
+    local cur_bright = (mg("b_bright") == true)
+    local cur_nofog = (mg("b_nofog") == true)
+    local cur_noshadow = (mg("b_noshadow") == true)
 
-if mg("b_bright") then
-lighting.SetBrightness(4)
-lighting.SetAmbient(1)
-lighting.SetOutdoorAmbient(1)
-end
-if mg("b_nofog") then
-lighting.SetFogStart(100000)
-lighting.SetFogEnd(100000)
-end
-if mg("b_noshadow") then
-lighting.SetDiffuseScale(0)
-lighting.SetSpecularScale(0)
-end
-if mg("b_nograss") then
-terrain.SetGrassLength(0)
-end
+    if cur_nograss == last_applied_nograss
+        and cur_bright == last_applied_bright
+        and cur_nofog == last_applied_nofog
+        and cur_noshadow == last_applied_noshadow then
+        return
+    end
+
+    local any = cur_bright or cur_nofog or cur_noshadow or cur_nograss
+    if any then save_originals() end
+
+    if cur_bright ~= last_applied_bright then
+        last_applied_bright = cur_bright
+        if cur_bright then
+            lighting.SetBrightness(4)
+            lighting.SetAmbient(1)
+            lighting.SetOutdoorAmbient(1)
+        elseif orig_light then
+            lighting.SetBrightness(orig_light.br)
+            lighting.SetAmbient(orig_light.am)
+            lighting.SetOutdoorAmbient(orig_light.oa)
+        end
+    end
+
+    if cur_nofog ~= last_applied_nofog then
+        last_applied_nofog = cur_nofog
+        if cur_nofog then
+            lighting.SetFogStart(100000)
+            lighting.SetFogEnd(100000)
+        elseif orig_light then
+            lighting.SetFogStart(orig_light.fs)
+            lighting.SetFogEnd(orig_light.fe)
+        end
+    end
+
+    if cur_noshadow ~= last_applied_noshadow then
+        last_applied_noshadow = cur_noshadow
+        if cur_noshadow then
+            lighting.SetDiffuseScale(0)
+            lighting.SetSpecularScale(0)
+        elseif orig_light then
+            lighting.SetDiffuseScale(orig_light.ds)
+            lighting.SetSpecularScale(orig_light.ss)
+        end
+    end
+
+    if cur_nograss ~= last_applied_nograss then
+        last_applied_nograss = cur_nograss
+        if cur_nograss then
+            if terrain and terrain.SetGrassLength then
+                pcall(function() terrain.SetGrassLength(0) end)
+            end
+            pcall(function()
+                local ws = game.Workspace
+                local tr = ws and (ws.Terrain or ws:FindFirstChildOfClass("Terrain"))
+                if tr then
+                    local sethidden = sethiddenproperty or set_hidden_property or set_hidden_prop
+                    if sethidden then pcall(sethidden, tr, "Decoration", false) end
+                    pcall(function() tr.Decoration = false end)
+                    for _, dec in ipairs(tr:GetChildren()) do
+                        if dec:IsA("Decoration") or dec.Name:lower():find("grass") then
+                            pcall(function() dec.Transparency = 1 end)
+                        end
+                    end
+                end
+            end)
+            local ws = game.Workspace
+            if ws then
+                local function hide_grass_in(container)
+                    if not container then return end
+                    local ok_d, descs = pcall(function() return container:GetDescendants() end)
+                    if not ok_d or not descs then return end
+                    for _, o in ipairs(descs) do
+                        if o and o:IsA("BasePart") and world.grass_orig[o] == nil then
+                            world.grass_orig[o] = o.Transparency or 0
+                            o.Transparency = 1
+                        end
+                    end
+                end
+                local ok_ch, wch = pcall(function() return ws:GetChildren() end)
+                if ok_ch and wch then
+                    for _, c in ipairs(wch) do
+                        if c then
+                            local cn = c.Name:lower()
+                            if cn:find("grass") or cn:find("weed") or cn:find("clover") or cn:find("turf") then
+                                if c:IsA("Model") or c:IsA("Folder") then
+                                    hide_grass_in(c)
+                                elseif c:IsA("BasePart") and world.grass_orig[c] == nil then
+                                    world.grass_orig[c] = c.Transparency or 0
+                                    c.Transparency = 1
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        else
+            if orig_grass and terrain and terrain.SetGrassLength then
+                pcall(function() terrain.SetGrassLength(orig_grass) end)
+            end
+            pcall(function()
+                local ws = game.Workspace
+                local tr = ws and (ws.Terrain or ws:FindFirstChildOfClass("Terrain"))
+                if tr then
+                    local dec = (world.orig_decor ~= nil) and world.orig_decor or true
+                    pcall(function() sethiddenproperty(tr, "Decoration", dec) end)
+                    pcall(function() tr.Decoration = dec end)
+                end
+            end)
+            if world.grass_orig and next(world.grass_orig) ~= nil then
+                for part, origTr in pairs(world.grass_orig) do
+                    pcall(function()
+                        if part and part.Parent then
+                            part.Transparency = origTr
+                        end
+                    end)
+                end
+                world.grass_orig = {}
+            end
+        end
+    end
 end
 
+local function apply_foliage_mods()
+    local on = (cfg.remove_foliage == true) or (mg("b_remove_foliage") == true)
+    if on == last_applied_foliage then return end
+    last_applied_foliage = on
+    if on then
+        local ws = game.Workspace
+        if not ws then return end
+
+        local function hide_foliage_in(container)
+            if not container then return end
+            local ok_d, descs = pcall(function() return container:GetDescendants() end)
+            if not ok_d or not descs then return end
+            for _, o in ipairs(descs) do
+                if o and o:IsA("BasePart") and world.foliage_orig[o] == nil then
+                    world.foliage_orig[o] = o.Transparency or 0
+                    o.Transparency = 1
+                end
+            end
+        end
+
+        local sz = ws:FindFirstChild("SpawnerZones")
+        if sz then
+            local fol = sz:FindFirstChild("Foliage")
+            if fol then hide_foliage_in(fol) end
+        end
+        local nc = ws:FindFirstChild("NoCollision")
+        if nc then
+            local fz = nc:FindFirstChild("FoliageZones")
+            if fz then hide_foliage_in(fz) end
+        end
+        local map_f = ws:FindFirstChild("Map")
+        if map_f then
+            local fol = map_f:FindFirstChild("Foliage") or map_f:FindFirstChild("Trees") or map_f:FindFirstChild("Bushes")
+            if fol then hide_foliage_in(fol) end
+        end
+
+        local ok_ch, wch = pcall(function() return ws:GetChildren() end)
+        if ok_ch and wch then
+            for _, c in ipairs(wch) do
+                if c and c:IsA("Model") then
+                    local cn = c.Name:lower()
+                    if cn:find("tree") or cn:find("pine") or cn:find("birch") or cn:find("oak")
+                        or cn:find("bush") or cn:find("shrub") or cn:find("fern")
+                        or cn:find("plant") or cn:find("foliage") or cn:find("hedge") then
+                        hide_foliage_in(c)
+                    end
+                elseif c and c:IsA("BasePart") and world.foliage_orig[c] == nil then
+                    local cn = c.Name:lower()
+                    if cn:find("leaf") or cn:find("leaves") or cn:find("foliage") or cn:find("bush") then
+                        world.foliage_orig[c] = c.Transparency or 0
+                        c.Transparency = 1
+                    end
+                end
+            end
+        end
+    else
+        if world.foliage_orig and next(world.foliage_orig) ~= nil then
+            for part, origTr in pairs(world.foliage_orig) do
+                pcall(function()
+                    if part and part.Parent then
+                        part.Transparency = origTr
+                    end
+                end)
+            end
+            world.foliage_orig = {}
+        end
+    end
+end
 
 local function scan_claymores()
 local ws = game.Workspace
@@ -3633,154 +4075,335 @@ draw.Text(x, y, label, tc, fs)
 end
 
 
-local function slf_scan()
-local found = {}
-for _, wp in ipairs(world.players) do
-local p = wp.entity
-if p and p.IsValid and p.IsAlive and not p.IsLocal then
-    local matched = {}
-    for _, item in ipairs(wp.inventory) do
-        local il = item:lower()
-        for _, tracked in ipairs(SLF_ITEMS) do
-            if il:find(tracked:lower(), 1, true) then
-                matched[#matched+1] = item
-                break
+local function draw_cheater_panel()
+    if not cfg.cheater_finder then
+        cheater_drag = false
+        return
+    end
+
+    local pw = 320
+    local TH = 24
+    local PAD = 8
+    local row_h = 36
+
+    -- Gather suspicious / cheater players only
+    local suspects = {}
+    local p_list = frame_players or entity.GetPlayers() or {}
+    for i = 1, #p_list do
+        local p = p_list[i]
+        if p and not p.IsLocal then
+            local pname = p.Name or "Player"
+            local ht = world.hacker_tracker[pname] or {}
+            local flags = ht.flags or 0
+            local max_spd = ht.max_spd or 0
+            local is_speeding = ht.is_speeding or false
+            local acct_age = -1
+            local ls_kills = 0
+            local kd = 0
+            local hours = 0
+            if world.players then
+                for _, wp in ipairs(world.players) do
+                    if wp.name == pname then
+                        acct_age = wp.acct_age or -1
+                        ls_kills = wp.ls_kills or 0
+                        kd = wp.kd or 0
+                        hours = wp.hours or 0
+                        break
+                    end
+                end
+            end
+            -- Longshot kills add flags (3+ longshots = 1 flag, 5+ = 2)
+            if ls_kills >= 5 then
+                flags = flags + 2
+            elseif ls_kills >= 3 then
+                flags = flags + 1
+            end
+            -- New account with any other flags is extra suspicious
+            if acct_age >= 0 and acct_age < 30 and (flags > 0 or is_speeding) then
+                flags = flags + 1
+            end
+
+            -- Only include player if they are suspicious or a cheater
+            local is_sus = (flags > 0) or is_speeding or (max_spd >= 35) or (ls_kills >= 3)
+            if is_sus then
+                suspects[#suspects + 1] = {
+                    name = pname,
+                    display = p.DisplayName or pname,
+                    acct_age = acct_age,
+                    ls_kills = ls_kills,
+                    kd = kd,
+                    hours = hours,
+                    flags = flags,
+                    max_spd = max_spd,
+                    is_speeding = is_speeding,
+                    userId = p.UserId or ht.userId or 0
+                }
             end
         end
     end
-    if #matched > 0 then
-        found[#found+1] = { name = wp.name, items = matched }
+
+    local menu_active = is_any_menu_open()
+    -- Only show up when there is a sus player or cheater (or menu is open so user can position it)
+    if #suspects == 0 and not menu_active then
+        cheater_drag = false
+        return
     end
-end
-end
-slf_results = found
-end
 
-local SLF_COL = {
-bg     = {0.05, 0.05, 0.07, 0.96},
-title  = {0.07, 0.07, 0.10, 1.00},
-border = {0.18, 0.72, 0.84, 1.00},
-accent = {0.18, 0.72, 0.84, 1.00},
-dim    = {0.25, 0.25, 0.30, 1.00},
-player = {1.00, 1.00, 1.00, 1.00},
-item   = {0.35, 0.90, 0.45, 1.00},
-none   = {0.45, 0.45, 0.50, 1.00},
-sep    = {0.18, 0.72, 0.84, 0.3},
-}
+    -- Sort: highest flags first, then longshot kills, then lowest account age
+    table.sort(suspects, function(a, b)
+        if a.flags ~= b.flags then
+            return a.flags > b.flags
+        end
+        if a.ls_kills ~= b.ls_kills then
+            return a.ls_kills > b.ls_kills
+        end
+        if a.acct_age ~= b.acct_age then
+            return a.acct_age < b.acct_age
+        end
+        return a.kd > b.kd
+    end)
 
-local function draw_slf_panel()
-if not cfg.slf then slf_drag = false; return end
-local pw = 280
-local TH, PAD, LH, FS, FSS = 24, 8, 16, 13, 11
-local nr = #slf_results
-local ph = TH + PAD
-if nr == 0 then
-ph = ph + LH + PAD
-else
-for _, entry in ipairs(slf_results) do
-    ph = ph + LH + (#entry.items * LH) + 6
-end
-ph = ph + PAD
-end
-local menu_active = is_any_menu_open()
-if not menu_active then
-    slf_drag = false
-end
+    local top_count = math.min(8, #suspects)
+    local ph = (top_count == 0) and TH or (TH + PAD + (top_count * (row_h + 4)) + 4)
 
-local mx, my = utility.GetMousePos()
-local lmb = menu_active and input.IsKeyDown(0x01)
-if lmb then
-if not slf_drag then
-    if mx >= slf_x and mx <= slf_x + pw and my >= slf_y and my <= slf_y + TH then
-        slf_drag = true; slf_dx = mx - slf_x; slf_dy = my - slf_y
+    if not menu_active then
+        cheater_drag = false
     end
-else slf_x = mx - slf_dx; slf_y = my - slf_dy end
-else slf_drag = false end
-local px, py = slf_x, slf_y
-local theme_col, theme_sub = get_active_theme()
-local tr, tg, tb = theme_col[1], theme_col[2], theme_col[3]
-draw.RectFilled(px, py, pw, ph, {0.05 + tr * 0.05, 0.05 + tg * 0.05, 0.07 + tb * 0.05, 0.95}, 4)
-draw.RectFilled(px, py, pw, TH, {0.07 + tr * 0.06, 0.07 + tg * 0.06, 0.09 + tb * 0.06, 1.00}, 4)
-draw.RectFilled(px, py, 2, TH, theme_col, 0)
-draw.Line(px, py+TH, px+pw, py+TH, theme_col, 1)
-draw.Rect(px, py, pw, ph, {theme_col[1]*0.5, theme_col[2]*0.5, theme_col[3]*0.5, 0.7}, 4, 1)
-local title = "Server Loot Finder"
-if nr > 0 then title = title .. "  [" .. nr .. "]" end
-draw.Text(px+PAD+2, py+5, title, theme_col, FS)
-local hint = "drag ::"
-local hw = draw.GetTextSize(hint, 10)
-draw.Text(px+pw-hw-PAD, py+6, hint, SLF_COL.dim, 10)
-local ly = py + TH + PAD
-if nr == 0 then
-draw.Text(px+PAD, ly, "No tracked loot found", SLF_COL.none, FS)
-return
-end
-for i, entry in ipairs(slf_results) do
-draw.Text(px+PAD, ly, "> " .. entry.name, SLF_COL.player, FS)
-ly = ly + LH
-for _, item in ipairs(entry.items) do
-    draw.Text(px+PAD+4, ly, "  - " .. item, SLF_COL.item, FSS)
-    ly = ly + LH
-end
-if i < nr then
-    draw.Line(px+PAD, ly+1, px+pw-PAD, ly+1, SLF_COL.sep, 1)
-end
-ly = ly + 6
-end
+
+    local mx, my = utility.GetMousePos()
+    local lmb = menu_active and input.IsKeyDown(0x01)
+    if lmb then
+        if not cheater_drag then
+            if mx >= cheater_x and mx <= cheater_x + pw and my >= cheater_y and my <= cheater_y + TH then
+                cheater_drag = true
+                cheater_dx = mx - cheater_x
+                cheater_dy = my - cheater_y
+            end
+        else
+            cheater_x = mx - cheater_dx
+            cheater_y = my - cheater_dy
+        end
+    else
+        cheater_drag = false
+    end
+
+    local px, py = cheater_x, cheater_y
+    local theme_col, theme_sub = get_active_theme()
+    local tr, tg, tb = theme_col[1], theme_col[2], theme_col[3]
+
+    -- Main window frame
+    draw.RectFilled(px, py, pw, ph, {0.05 + tr * 0.04, 0.05 + tg * 0.04, 0.07 + tb * 0.04, 0.95}, 4)
+    draw.RectFilled(px, py, pw, TH, {0.07 + tr * 0.05, 0.07 + tg * 0.05, 0.09 + tb * 0.05, 1.00}, 4)
+    draw.RectFilled(px, py, 2, TH, theme_col, 0)
+    draw.Line(px, py + TH, px + pw, py + TH, theme_col, 1)
+    draw.Rect(px, py, pw, ph, {theme_col[1] * 0.5, theme_col[2] * 0.5, theme_col[3] * 0.5, 0.7}, 4, 1)
+
+    local title = "Cheater Finder"
+    if top_count > 0 then
+        title = title .. string.format("  [%d Suspect%s]", top_count, top_count > 1 and "s" or "")
+    else
+        title = title .. "  [No Suspects]"
+    end
+    draw.Text(px + PAD + 2, py + 5, title, (top_count > 0) and {1.0, 0.3, 0.3, 1.0} or theme_col, 13)
+    local hint = "drag ::"
+    local hw = draw.GetTextSize(hint, 10)
+    hw = (type(hw) == "number" and hw > 0 and hw) or 30
+    draw.Text(px + pw - hw - PAD, py + 6, hint, {0.4, 0.4, 0.5, 0.8}, 10)
+
+    if top_count == 0 then
+        return
+    end
+
+    local ly = py + TH + PAD
+    for idx = 1, top_count do
+        local entry = suspects[idx]
+        local ry = ly + (idx - 1) * (row_h + 4)
+        local rw = pw - PAD * 2
+        local rx = px + PAD
+
+        -- Row background
+        local row_bg = (entry.flags >= 2 or entry.is_speeding) and {0.24, 0.05, 0.05, 0.75} or {0.18, 0.10, 0.04, 0.70}
+        draw.RectFilled(rx, ry, rw, row_h, row_bg, 3)
+        draw.Rect(rx, ry, rw, row_h, (entry.flags >= 2 or entry.is_speeding) and {0.8, 0.2, 0.2, 0.5} or {0.8, 0.5, 0.1, 0.4}, 3, 1)
+
+        -- Initials badge (instant, zero network lag)
+        local av_sz = 26
+        local av_x = rx + 4
+        local av_y = ry + math.floor((row_h - av_sz) / 2)
+        local ini_bg = (entry.flags >= 2 or entry.is_speeding) and {0.35, 0.08, 0.08, 0.95} or {0.22, 0.14, 0.05, 0.95}
+        local ini_border = (entry.flags >= 2 or entry.is_speeding) and {0.9, 0.25, 0.25, 0.8} or {0.8, 0.55, 0.15, 0.8}
+        draw.RectFilled(av_x, av_y, av_sz, av_sz, ini_bg, 2)
+        draw.Rect(av_x, av_y, av_sz, av_sz, ini_border, 2, 1)
+        local ini = entry.name:sub(1, 2):upper()
+        draw.Text(av_x + 5, av_y + 6, ini, {1.0, 0.95, 0.95, 1.0}, 10)
+
+        -- Player info — color name + stats based on threat level
+        local info_x = av_x + av_sz + 6
+        local name_txt = entry.name
+        if #name_txt > 14 then name_txt = name_txt:sub(1, 13) .. ".." end
+        -- Green for clean, orange for sus, red for cheater
+        local name_col, stat_col
+        if entry.flags >= 3 then
+            name_col = {1.0, 0.25, 0.25, 1.0}
+            stat_col = {1.0, 0.35, 0.35, 0.95}
+        elseif entry.flags >= 1 or entry.is_speeding then
+            name_col = {1.0, 0.75, 0.2, 1.0}
+            stat_col = {1.0, 0.65, 0.25, 0.9}
+        else
+            name_col = {0.3, 0.95, 0.45, 1.0}
+            stat_col = {0.35, 0.85, 0.5, 0.9}
+        end
+        draw.Text(info_x, ry + 3, name_txt, name_col, 11)
+
+        -- Stats line: Account Age + Longshots + Speed
+        local parts = {}
+        if entry.acct_age >= 0 then
+            local age_str
+            if entry.acct_age < 1 then
+                age_str = "<1d"
+            elseif entry.acct_age < 365 then
+                age_str = string.format("%dd", entry.acct_age)
+            else
+                age_str = string.format("%.1fy", entry.acct_age / 365)
+            end
+            parts[#parts + 1] = "Acct:" .. age_str
+        end
+        if entry.kd > 0 then
+            parts[#parts + 1] = string.format("KD:%.1f", entry.kd)
+        end
+        if entry.hours > 0 then
+            parts[#parts + 1] = string.format("%dh", entry.hours)
+        end
+        if entry.ls_kills > 0 then
+            parts[#parts + 1] = string.format("LS:%d", entry.ls_kills)
+        end
+        if entry.max_spd and entry.max_spd > 0 then
+            parts[#parts + 1] = string.format("%ds/s", entry.max_spd)
+        end
+        local stats_txt = #parts > 0 and table.concat(parts, " | ") or "monitoring..."
+        draw.Text(info_x, ry + 17, stats_txt, stat_col, 9)
+
+
+        -- Flag badge on the right
+        local badge_col, badge_txt, bg_badge
+        if entry.flags >= 3 then
+            badge_col = {1.0, 0.2, 0.2, 1.0}
+            bg_badge = {0.35, 0.05, 0.05, 0.85}
+            badge_txt = string.format("CHEATER (%d)", entry.flags)
+        elseif entry.flags >= 1 or entry.is_speeding then
+            badge_col = {1.0, 0.75, 0.2, 1.0}
+            bg_badge = {0.30, 0.18, 0.04, 0.85}
+            badge_txt = string.format("SUS (%d)", math.max(1, entry.flags))
+        else
+            badge_col = {0.4, 0.85, 0.5, 0.8}
+            bg_badge = {0.05, 0.18, 0.08, 0.6}
+            badge_txt = "CLEAN"
+        end
+
+        local bw, _ = draw.GetTextSize(badge_txt, 10)
+        bw = (type(bw) == "number" and bw > 0 and bw) or (#badge_txt * 6.5)
+        local bx = rx + rw - bw - 10
+        local by = ry + 4
+        draw.RectFilled(bx - 3, by, bw + 6, 14, bg_badge, 2)
+        draw.Rect(bx - 3, by, bw + 6, 14, badge_col, 2, 1)
+        draw.Text(bx, by + 1, badge_txt, badge_col, 10)
+
+        -- Speed indicator bottom-right
+        if entry.max_spd and entry.max_spd > 0 then
+            local spd_txt = string.format("%d s/s", entry.max_spd)
+            local sw_sz, _ = draw.GetTextSize(spd_txt, 9)
+            sw_sz = (type(sw_sz) == "number" and sw_sz > 0 and sw_sz) or (#spd_txt * 6)
+            draw.Text(rx + rw - sw_sz - 10, ry + 20, spd_txt, {0.6, 0.6, 0.7, 0.75}, 9)
+        end
+    end
 end
 
 
 local function scan_cars()
-local ws = game.Workspace
-if not ws then return end
-local results = {}
-local function check_model(model)
-if not model:IsA("Model") then return end
-local has_seat = model:FindFirstChildOfClass("VehicleSeat")
-if not has_seat and not is_car_name(model.Name) then return end
-local prim = model:FindFirstChildOfClass("VehicleSeat")
-    or model:FindFirstChildOfClass("BasePart")
-if prim and prim.Position then
-    results[#results+1] = {
-        name = model.Name, part = prim
-    }
-end
-end
-for _, fname in ipairs({"Vehicles", "Cars", "SpawnedVehicles", "VehicleSpawners"}) do
-    local folder = ws:FindFirstChild(fname)
-    if folder then
-        local ok2, fc = pcall(function() return folder:GetChildren() end)
-        if ok2 and fc then
-            for _, child in ipairs(fc) do check_model(child) end
+    local ws = game.Workspace
+    if not ws then return end
+    local results = {}
+    local seen = {}
+
+    local function check_cand(model)
+        if not model or seen[model] then return end
+        local is_mod = model:IsA("Model")
+        local is_folder = model:IsA("Folder")
+        if not is_mod and not is_folder then return end
+
+        local vseat = model:FindFirstChildOfClass("VehicleSeat")
+            or model:FindFirstChild("DriveSeat")
+            or model:FindFirstChild("VehicleSeat")
+        local name_match = is_car_name(model.Name)
+
+        if vseat or name_match then
+            local prim = vseat or model.PrimaryPart or model:FindFirstChild("Chassis") or model:FindFirstChild("Body") or model:FindFirstChildOfClass("BasePart")
+            if prim and prim.Position then
+                seen[model] = true
+                results[#results + 1] = {
+                    name = model.Name,
+                    part = prim
+                }
+            end
         end
     end
-end
-world_cars = results
+
+    -- 1. Check known vehicle folders
+    for _, fname in ipairs({"Vehicles", "Cars", "SpawnedVehicles", "VehicleSpawners", "NoCollision", "Map", "Interactables", "WorldVehicles"}) do
+        local folder = ws:FindFirstChild(fname)
+        if folder then
+            local ok, ch = pcall(function() return folder:GetChildren() end)
+            if ok and ch then
+                for _, c in ipairs(ch) do
+                    check_cand(c)
+                    if c:IsA("Folder") or c:IsA("Model") then
+                        local sub_ok, sub_ch = pcall(function() return c:GetChildren() end)
+                        if sub_ok and sub_ch then
+                            for _, sc in ipairs(sub_ch) do check_cand(sc) end
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    -- 2. Check top-level Workspace children
+    local ok_w, wch = pcall(function() return ws:GetChildren() end)
+    if ok_w and wch then
+        for _, c in ipairs(wch) do check_cand(c) end
+    end
+
+    world_cars = results
 end
 
 local function draw_cars()
-if not cfg.car then return end
-local lp = entity.GetLocalPlayer()
-local mp = lp and lp.Position
-if not mp then return end
-local cx, cy, cz = mp.X, mp.Y, mp.Z
-local max_r = cfg.car_r * STUDS_PER_M
-for i = 1, #world_cars do
-local c = world_cars[i]
-local pos = c.part and c.part.Position
-if pos then
-    local d = dist3(pos.X, pos.Y, pos.Z, cx, cy, cz)
-    if d <= max_r then
-        local sx, sy, sv = draw.WorldToScreen(pos.X, pos.Y, pos.Z)
-        if sv then
-            local dm = floor(d * M_PER_STUD)
-            local txt = format("[CAR] %s [%dm]", c.name, dm)
-            local tw = draw.GetTextSize(txt, 13)
-            draw.Text(sx - tw*0.5, sy, txt, cfg.car_c, 13)
+    if not cfg.car then return end
+    local lp = entity.GetLocalPlayer()
+    local mp = lp and lp.Position
+    if not mp then return end
+    local cx, cy, cz = mp.X, mp.Y, mp.Z
+    local max_r = (cfg.car_r or 2000) * STUDS_PER_M
+    for i = 1, #world_cars do
+        local c = world_cars[i]
+        local pos = c.part and utility.IsValid(c.part) and c.part.Position
+        if pos then
+            local d = dist3(pos.X, pos.Y, pos.Z, cx, cy, cz)
+            if d <= max_r then
+                local sx, sy, sv = utility.WorldToScreen(pos.X, pos.Y, pos.Z)
+                if not sv then
+                    sx, sy, sv = draw.WorldToScreen(pos.X, pos.Y, pos.Z)
+                end
+                if sv then
+                    local dm = floor(d * M_PER_STUD)
+                    local txt = format("CAR: %s [%dm]", c.name, dm)
+                    local tw = draw.GetTextSize(txt, 13)
+                    tw = (type(tw) == "number" and tw > 0 and tw) or (#txt * 7.5)
+                    local col = cfg.car_c or {1.0, 0.75, 0.2, 1.0}
+                    draw.Text(sx - tw * 0.5, sy, txt, col, 13)
+                end
+            end
         end
     end
-end
-end
 end
 
 
@@ -3855,25 +4478,720 @@ draw.Text(rx+4, ry+2, format("RADAR [%dm]", cfg.radar_range), {0.6, 0.7, 0.9, 0.
 end
 
 
-local function draw_hitmarker()
-if not cfg.hitmarker then return end
-local now = os.clock()
-if aim_target_ent and input.IsKeyDown(0x01) then
-hitmarker_time = now
-end
-local elapsed = now - hitmarker_time
-if elapsed < 0.25 then
-local scx, scy = input.GetScreenCenter()
-local alpha = 1.0 - (elapsed / 0.25)
-local s = 6
-local col = {1, 1, 1, alpha}
-draw.Line(scx-s, scy-s, scx-3, scy-3, col, 2)
-draw.Line(scx+s, scy-s, scx+3, scy-3, col, 2)
-draw.Line(scx-s, scy+s, scx-3, scy+3, col, 2)
-draw.Line(scx+s, scy+s, scx+3, scy+3, col, 2)
-end
+
+local function update_hacker_detector()
+    if not cfg.cheater_finder then return end
+    local now = tick()
+    local threshold = 35
+    local duration = 0.8
+    for i = 1, #frame_players do
+        local p = frame_players[i]
+        if p and not p.IsLocal and p.IsAlive then
+            local pos = p.Position
+            if pos then
+                local d = world.hacker_tracker[p.Name]
+                if not d then
+                    world.hacker_tracker[p.Name] = { pos = pos, time = now, h_since = nil, last_alert = 0, is_speeding = false, flags = 0, max_spd = 0, userId = p.UserId or 0 }
+                else
+                    if not d.flags then d.flags = 0 end
+                    if not d.max_spd then d.max_spd = 0 end
+                    if not d.userId or d.userId == 0 then d.userId = p.UserId or 0 end
+                    local dt = now - d.time
+                    if dt >= 0.25 then
+                        local dx = pos.X - d.pos.X
+                        local dz = pos.Z - d.pos.Z
+                        local dist_h = math.sqrt(dx * dx + dz * dz)
+                        if dist_h > 65 then
+                            d.pos = pos
+                            d.time = now
+                            d.h_since = nil
+                        else
+                            local actual_spd = dist_h / dt
+                            if actual_spd >= threshold then
+                                if not d.h_since then
+                                    d.h_since = now
+                                elseif (now - d.h_since) >= duration then
+                                    if not d.is_speeding then
+                                        d.flags = d.flags + 1
+                                    end
+                                    d.is_speeding = true
+                                    local int_spd = math.floor(actual_spd + 0.5)
+                                    if int_spd > d.max_spd then
+                                        d.max_spd = int_spd
+                                    end
+                                    if world and world.players then
+                                        for _, wp in ipairs(world.players) do
+                                            if wp.name == p.Name then wp.is_cheater = true; break end
+                                        end
+                                    end
+                                    if (now - d.last_alert) >= 10.0 then
+                                        d.last_alert = now
+                                        pcall(function()
+                                            notify.Warning("HACKER DETECTED", string.format("%s moving abnormally fast! (%d studs/s)", p.Name, int_spd), 4)
+                                        end)
+                                    end
+                                end
+                            else
+                                d.h_since = nil
+                                d.is_speeding = false
+                            end
+                            d.pos = pos
+                            d.time = now
+                        end
+                    end
+                end
+            end
+        end
+    end
 end
 
+is_gun_equipped = function()
+    local lp = entity.GetLocalPlayer()
+    if not lp or not lp.IsAlive then return false end
+
+    local eq_name = nil
+    pcall(function()
+        local rep = game.ReplicatedStorage
+        if rep and lp.Name then
+            local p_data = rep:FindFirstChild("Players") and rep.Players:FindFirstChild(lp.Name)
+            local status = p_data and p_data:FindFirstChild("Status")
+            local gv = status and status:FindFirstChild("GameplayVariables")
+            local eq = gv and gv:FindFirstChild("EquippedTool")
+            if eq and eq.Value then
+                eq_name = (type(eq.Value) == "string" and eq.Value)
+                    or (type(eq.Value) == "userdata" and eq.Value.Name)
+                    or tostring(eq.Value)
+            end
+        end
+    end)
+
+    if not eq_name or eq_name == "" or eq_name:lower() == "none" or eq_name:lower() == "hands" then
+        pcall(function()
+            local char = lp.Character
+            if char and utility.IsValid(char) then
+                for _, ch in ipairs(char:GetChildren()) do
+                    if (ch:IsA("Model") or ch:IsA("Tool")) and ch.Name ~= "Clothing" and ch.Name ~= "Holstered" and ch.Name ~= "ViewModel" then
+                        eq_name = ch.Name
+                        break
+                    end
+                end
+            end
+        end)
+    end
+
+    if not eq_name or eq_name == "" or eq_name:lower() == "none" or eq_name:lower() == "hands" then
+        return false
+    end
+
+    local low = eq_name:lower()
+    if low:find("knife") or low:find("dv2") or low:find("melee") or low:find("blade")
+        or low:find("axe") or low:find("scythe") or low:find("tomahawk")
+        or low:find("sword") or low:find("crowbar") or low:find("dagger")
+        or low:find("karambit") or low:find("kukri") or low:find("pick")
+        or low:find("lighter") or low:find("map") or low:find("bandage")
+        or low:find("splint") or low:find("medkit") or low:find("ifak")
+        or low:find("ai2") or low:find("injector") or low:find("suture")
+        or low:find("food") or low:find("drink") or low:find("bottle")
+        or low:find("can") or low:find("key") or low:find("card")
+        or low:find("grenade") or low:find("f1") or low:find("rgd") then
+        return false
+    end
+
+    if WEAPON_CALIBER then
+        for k in pairs(WEAPON_CALIBER) do
+            if low:find(k:lower(), 1, true) then return true end
+        end
+    end
+    if low:find("rifle") or low:find("pistol") or low:find("shotgun") or low:find("smg")
+        or low:find("sniper") or low:find("carbine") or low:find("gun") or low:find("revolver")
+        or low:find("mosin") or low:find("ak") or low:find("m4") or low:find("svd")
+        or low:find("val") or low:find("vintorez") or low:find("mp") or low:find("glock")
+        or low:find("beretta") or low:find("colt") or low:find("tokarev") or low:find("makarov")
+        or low:find("sks") or low:find("saiga") or low:find("toz") or low:find("izh")
+        or low:find("fal") or low:find("r700") or low:find("tfz") or low:find("groza")
+        or low:find("vz61") or low:find("tt33") or low:find("adar") or low:find("pkm")
+        or low:find("ppsh") or low:find("scar") or low:find("aug") or low:find("hk")
+        or low:find("m16") or low:find("m14") or low:find("remington") or low:find("mossberg")
+        or low:find("deagle") or low:find("usp") or low:find("vector") or low:find("ump")
+        or low:find("mpx") or low:find("p90") or low:find("sr25") or low:find("g3")
+        or low:find("l96") or low:find("awm") or low:find("awp") or low:find("rpk") then
+        return true
+    end
+
+    return true
+end
+
+local function is_weapon_full_auto()
+    local lp = entity.GetLocalPlayer()
+    local rep = game.ReplicatedStorage
+    if rep and lp and lp.Name then
+        local p_data = rep:FindFirstChild("Players") and rep.Players:FindFirstChild(lp.Name)
+        local status = p_data and p_data:FindFirstChild("Status")
+        local gv = status and status:FindFirstChild("GameplayVariables")
+        local eq = gv and gv:FindFirstChild("EquippedTool")
+        if eq and eq.Value then
+            local n = tostring(eq.Value):lower()
+            if n:find("ak") or n:find("m4a1") or n:find("pkm") or n:find("fal")
+                or n:find("asval") or n:find("mp5") or n:find("ppsh")
+                or n:find("groza") or n:find("vz61") then
+                return true
+            end
+        end
+    end
+    return false
+end
+
+local function get_gun_muzzle_pos()
+    local ws = game.Workspace
+    local cam = get_cam_instance()
+    local vm = (cam and cam:FindFirstChild("ViewModel")) or (ws and ws:FindFirstChild("ViewModel"))
+    if vm and utility.IsValid(vm) then
+        local item = vm:FindFirstChild("Item") or vm
+        if item and utility.IsValid(item) then
+            for _, name in ipairs({"Muzzle", "Flashhider", "Barrel", "MuzzleOffset", "Tip", "FrontSight"}) do
+                local p = item:FindFirstChild(name)
+                if p and utility.IsValid(p) and p.Position then
+                    return p.Position
+                end
+            end
+            local ch = item:GetChildren()
+            for i = 1, #ch do
+                local c = ch[i]
+                if c and utility.IsValid(c) and c:IsA("BasePart") then
+                    local cl = c.Name:lower()
+                    if cl:find("muzzle") or cl:find("barrel") or cl:find("flash") then
+                        return c.Position
+                    end
+                end
+            end
+        end
+    end
+
+    local lp = entity.GetLocalPlayer()
+    local char = lp and lp.Character
+    if char and utility.IsValid(char) then
+        for _, ch in ipairs(char:GetChildren()) do
+            if (ch:IsA("Model") or ch:IsA("Tool")) and ch.Name ~= "Clothing" and ch.Name ~= "Holstered" and ch.Name ~= "ViewModel" then
+                local m = ch:FindFirstChild("Muzzle") or ch:FindFirstChild("Barrel")
+                if m and utility.IsValid(m) and m.Position then
+                    return m.Position
+                end
+            end
+        end
+        local rh = char:FindFirstChild("RightHand") or char:FindFirstChild("Right Arm")
+        if rh and utility.IsValid(rh) and rh.Position then
+            local look = camera.GetLookVector() or Vector3.New(0, 0, 1)
+            return rh.Position + look * 1.5
+        end
+    end
+
+    local cam_pos = camera.GetPosition()
+    local look = camera.GetLookVector()
+    if cam_pos and look then
+        local up = Vector3.New(0, 1, 0)
+        local right = Vector3.New(look.Z, 0, -look.X)
+        local mag = math.sqrt(right.X * right.X + right.Z * right.Z)
+        if mag > 0.001 then
+            right = Vector3.New(right.X / mag, 0, right.Z / mag)
+        else
+            right = Vector3.New(1, 0, 0)
+        end
+        return cam_pos + look * 1.2 + right * 0.4 - up * 0.3
+    end
+    return nil
+end
+
+local function check_combat_hits()
+    local now = os.clock()
+    local hit_dur = cfg.hit_log_dur or menu.Get("b_hit_log_duration") or 4.0
+    local is_hl_on = cfg.hit_logs or menu.Get("b_hit_logs")
+    local is_hm_on = cfg.hitmarker or menu.Get("b_hitmarker")
+    local is_tracer_on = cfg.bullet_tracers or menu.Get("b_bullet_tracers")
+
+    -- 1. Check other Players live health
+    for i = 1, #frame_players do
+        local p = frame_players[i]
+        if p and not p.IsLocal then
+            local key = p.UserId or p.Name
+            local old_hp = world.enemy_health[key]
+            local cur_hp = p.Health
+            local is_alive = p.IsAlive
+            if is_alive == nil then
+                is_alive = (not p.IsDead) and (cur_hp == nil or cur_hp > 0)
+            end
+
+            local pos = p.HeadPosition or p.Position
+            if not pos and world.enemy_last_pos then
+                pos = world.enemy_last_pos[key]
+            end
+            if not pos and world.my_last_target_key == key then
+                pos = world.my_last_target_pos
+            end
+            if pos then
+                if not world.enemy_last_pos then world.enemy_last_pos = {} end
+                world.enemy_last_pos[key] = pos
+            end
+
+            local dmg = 0
+            local is_kill = false
+
+            if old_hp and old_hp > 0 then
+                if cur_hp and cur_hp < old_hp and (old_hp - cur_hp) >= 1 then
+                    dmg = math.floor(old_hp - cur_hp + 0.5)
+                    if not is_alive or (cur_hp and cur_hp <= 0) then
+                        is_kill = true
+                    end
+                elseif not is_alive or (cur_hp and cur_hp <= 0) then
+                    -- One-shot or fatal hit!
+                    dmg = math.floor(old_hp + 0.5)
+                    is_kill = true
+                end
+            elseif old_hp == nil then
+                if is_alive and cur_hp and cur_hp > 0 then
+                    world.enemy_health[key] = cur_hp
+                elseif not is_alive or (cur_hp and cur_hp <= 0) then
+                    local time_since_shot = now - (world.my_last_shot_time or 0)
+                    if time_since_shot >= 0 and time_since_shot <= 0.40 then
+                        dmg = math.floor((p.MaxHealth and p.MaxHealth > 0 and p.MaxHealth) or 100)
+                        is_kill = true
+                    end
+                end
+            end
+
+            if dmg > 0 then
+                local is_my_hit = false
+                local time_since_shot = now - (world.my_last_shot_time or 0)
+                if time_since_shot >= 0 and time_since_shot <= 1.25 then
+                    if world.my_last_target_key and (world.my_last_target_key == key or world.my_last_target_name == p.Name) then
+                        is_my_hit = true
+                    elseif world.my_last_shot_look and pos then
+                        local cam_pos = camera.GetPosition()
+                        if cam_pos then
+                            local v = pos - cam_pos
+                            local proj = v.X * world.my_last_shot_look.X + v.Y * world.my_last_shot_look.Y + v.Z * world.my_last_shot_look.Z
+                            if proj > 1.2 then
+                                local rx = cam_pos.X + world.my_last_shot_look.X * proj
+                                local ry = cam_pos.Y + world.my_last_shot_look.Y * proj
+                                local rz = cam_pos.Z + world.my_last_shot_look.Z * proj
+                                if dist3(pos.X, pos.Y, pos.Z, rx, ry, rz) <= 9.0 then
+                                    is_my_hit = true
+                                end
+                            end
+                        end
+                    elseif world.silent_target_pos and pos then
+                        if dist3(pos.X, pos.Y, pos.Z, world.silent_target_pos.X, world.silent_target_pos.Y, world.silent_target_pos.Z) <= 6.0 then
+                            is_my_hit = true
+                        end
+                    end
+                end
+
+                if is_my_hit then
+                    if is_hm_on then
+                        world.hitmarker = { time = now, pos = pos, is_head = (dmg >= 55 or is_kill) }
+                    end
+                    if is_hl_on then
+                        local ts = (os.date and os.date("%H:%M:%S")) or "00:00:00"
+                        local p_name = p.Name or "Player"
+                        local kill_str = is_kill and " [KILL]" or ""
+                        table.insert(world.hit_logs, {
+                            text = string.format("[%s] Hit %s for -%d HP%s", ts, p_name, dmg, kill_str),
+                            created = now,
+                            lifetime = hit_dur
+                        })
+                        if #world.hit_logs > 8 then table.remove(world.hit_logs, 1) end
+                    end
+                    if is_tracer_on and pos then
+                        local muzzle_pos = get_gun_muzzle_pos()
+                        local origin = world.my_last_shot_origin or muzzle_pos or camera.GetPosition()
+                        if origin then
+                            table.insert(world.tracers, {
+                                created = now,
+                                from = origin,
+                                to = pos
+                            })
+                            if #world.tracers > 20 then table.remove(world.tracers, 1) end
+                        end
+                    end
+                end
+            end
+
+            if is_alive and cur_hp and cur_hp > 0 then
+                world.enemy_health[key] = cur_hp
+            else
+                world.enemy_health[key] = 0
+            end
+        end
+    end
+
+    -- 2. Check NPCs (Scavs, Raiders, Bosses) live health
+    if world.npcs then
+        for i = 1, #world.npcs do
+            local npc = world.npcs[i]
+            if npc and npc.hum and utility.IsValid(npc.hum) then
+                local cur_hp = nil
+                pcall(function() cur_hp = npc.hum.Health end)
+                local key = (npc.hum.Address) or (npc.model and npc.model.Address) or ("npc_" .. i)
+                local old_hp = world.enemy_health[key]
+
+                local pos = nil
+                if npc.head and utility.IsValid(npc.head) then
+                    pos = npc.head.Position
+                elseif npc.model and utility.IsValid(npc.model) and npc.model.PrimaryPart then
+                    pos = npc.model.PrimaryPart.Position
+                end
+                if not pos and world.enemy_last_pos then
+                    pos = world.enemy_last_pos[key]
+                end
+                if not pos and world.my_last_target_key == key then
+                    pos = world.my_last_target_pos
+                end
+                if pos then
+                    if not world.enemy_last_pos then world.enemy_last_pos = {} end
+                    world.enemy_last_pos[key] = pos
+                end
+
+                local dmg = 0
+                local is_kill = false
+
+                if old_hp and old_hp > 0 then
+                    if cur_hp and cur_hp < old_hp and (old_hp - cur_hp) >= 1 then
+                        dmg = math.floor(old_hp - cur_hp + 0.5)
+                        if cur_hp <= 0 then is_kill = true end
+                    elseif cur_hp == nil or cur_hp <= 0 then
+                        -- One-shot kill on NPC!
+                        dmg = math.floor(old_hp + 0.5)
+                        is_kill = true
+                    end
+                elseif old_hp == nil then
+                    if cur_hp and cur_hp > 0 then
+                        world.enemy_health[key] = cur_hp
+                    else
+                        local time_since_shot = now - (world.my_last_shot_time or 0)
+                        if time_since_shot >= 0 and time_since_shot <= 0.40 then
+                            dmg = 100
+                            is_kill = true
+                        end
+                    end
+                end
+
+                if dmg > 0 then
+                    local is_my_hit = false
+                    local time_since_shot = now - (world.my_last_shot_time or 0)
+                    if time_since_shot >= 0 and time_since_shot <= 1.25 then
+                        if world.my_last_target_key and (world.my_last_target_key == key or world.my_last_target_name == npc.name) then
+                            is_my_hit = true
+                        elseif world.my_last_shot_look and pos then
+                            local cam_pos = camera.GetPosition()
+                            if cam_pos then
+                                local v = pos - cam_pos
+                                local proj = v.X * world.my_last_shot_look.X + v.Y * world.my_last_shot_look.Y + v.Z * world.my_last_shot_look.Z
+                                if proj > 1.2 then
+                                    local rx = cam_pos.X + world.my_last_shot_look.X * proj
+                                    local ry = cam_pos.Y + world.my_last_shot_look.Y * proj
+                                    local rz = cam_pos.Z + world.my_last_shot_look.Z * proj
+                                    if dist3(pos.X, pos.Y, pos.Z, rx, ry, rz) <= 9.0 then
+                                        is_my_hit = true
+                                    end
+                                end
+                            end
+                        elseif world.silent_target_pos and pos then
+                            if dist3(pos.X, pos.Y, pos.Z, world.silent_target_pos.X, world.silent_target_pos.Y, world.silent_target_pos.Z) <= 6.0 then
+                                is_my_hit = true
+                            end
+                        end
+                    end
+
+                    if is_my_hit then
+                        if is_hm_on then
+                            world.hitmarker = { time = now, pos = pos, is_head = (dmg >= 55 or is_kill) }
+                        end
+                        if is_hl_on then
+                            local ts = (os.date and os.date("%H:%M:%S")) or "00:00:00"
+                            local target_name = npc.name or "Scav"
+                            local kill_str = is_kill and " [KILL]" or ""
+                            table.insert(world.hit_logs, {
+                                text = string.format("[%s] Hit %s for -%d HP%s", ts, target_name, dmg, kill_str),
+                                created = now,
+                                lifetime = hit_dur
+                            })
+                            if #world.hit_logs > 8 then table.remove(world.hit_logs, 1) end
+                        end
+                        if is_tracer_on and pos then
+                            local muzzle_pos = get_gun_muzzle_pos()
+                            local origin = world.my_last_shot_origin or muzzle_pos or camera.GetPosition()
+                            if origin then
+                                table.insert(world.tracers, {
+                                    created = now,
+                                    from = origin,
+                                    to = pos
+                                })
+                                if #world.tracers > 20 then table.remove(world.tracers, 1) end
+                            end
+                        end
+                    end
+                end
+
+                if cur_hp and cur_hp > 0 then
+                    world.enemy_health[key] = cur_hp
+                else
+                    world.enemy_health[key] = 0
+                end
+            end
+        end
+    end
+end
+
+local function draw_bullet_tracers()
+    local is_tracer_on = cfg.bullet_tracers or menu.Get("b_bullet_tracers")
+    local is_hm_on = cfg.hitmarker or menu.Get("b_hitmarker")
+    local is_hl_on = cfg.hit_logs or menu.Get("b_hit_logs")
+    if not is_tracer_on and not is_hm_on and not is_hl_on then return end
+
+    local now = os.clock()
+    local max_dur = cfg.tracer_dur or menu.Get("b_tracer_duration") or 1.0
+    local tr_col = cfg.tracer_c or mc("b_bullet_tracers") or {0.25, 0.65, 1.0, 1.0}
+
+    local is_lmb_down = input.IsKeyDown(0x01) or false
+    local is_click = is_lmb_down and not world.last_tracer_lmb
+    world.last_tracer_lmb = is_lmb_down
+
+    if not is_any_menu_open() and is_lmb_down and is_gun_equipped() then
+        local cur_ammo = get_local_ammo()
+
+        if cur_ammo ~= nil and cur_ammo <= 0 then
+            world.last_ammo = 0
+        else
+            local did_fire = false
+            if cur_ammo ~= nil then
+                if world.last_ammo ~= nil and cur_ammo < world.last_ammo then
+                    -- Real shot: magazine round count decreased
+                    did_fire = true
+                elseif is_click and cur_ammo > 0 then
+                    -- Trigger click with live rounds available
+                    did_fire = true
+                end
+                world.last_ammo = cur_ammo
+            else
+                if is_click then
+                    did_fire = true
+                end
+            end
+
+            if did_fire then
+                world.last_shot = now
+                world.last_combat_action = now
+                world.my_last_shot_time = now
+
+                local muzzle_pos = get_gun_muzzle_pos()
+                local cam_pos = camera.GetPosition()
+                local look = camera.GetLookVector()
+
+                if (muzzle_pos or cam_pos) and look then
+                    local origin = muzzle_pos or (cam_pos + look * 1.2)
+                    world.my_last_shot_origin = origin
+                    world.my_last_shot_look = look
+                    world.my_last_target_key = nil
+                    world.my_last_target_name = nil
+                    world.my_last_target_pos = nil
+
+                    -- 1. If silent aim was active toward a target, associate this shot with that target
+                    if world.silent_target_pos and (now - (world.silent_target_time or 0)) < 0.35 then
+                        world.my_last_target_key = world.silent_target_key
+                        world.my_last_target_name = world.silent_target_name
+                        world.my_last_target_pos = world.silent_target_pos
+                    else
+                        -- 2. Otherwise associate shot with player/NPC closest to look vector
+                        local closest_dist = 500
+                        for pi = 1, #frame_players do
+                            local ep = frame_players[pi]
+                            if ep and not ep.IsLocal and ep.IsAlive then
+                                local hp = ep.HeadPosition or ep.Position
+                                if hp then
+                                    local v = hp - cam_pos
+                                    local proj = v.X * look.X + v.Y * look.Y + v.Z * look.Z
+                                    if proj > 1.5 and proj < closest_dist then
+                                        local rx = cam_pos.X + look.X * proj
+                                        local ry = cam_pos.Y + look.Y * proj
+                                        local rz = cam_pos.Z + look.Z * proj
+                                        if dist3(hp.X, hp.Y, hp.Z, rx, ry, rz) <= 4.0 then
+                                            closest_dist = proj
+                                            world.my_last_target_key = ep.UserId or ep.Name
+                                            world.my_last_target_name = ep.Name or "Player"
+                                            world.my_last_target_pos = hp
+                                        end
+                                    end
+                                end
+                            end
+                        end
+                        if not world.my_last_target_key and world.npcs then
+                            for ni = 1, #world.npcs do
+                                local en = world.npcs[ni]
+                                local nb = (en and en.head and en.head.Position) or (en and en.model and en.model.PrimaryPart and en.model.PrimaryPart.Position)
+                                if nb then
+                                    local v = nb - cam_pos
+                                    local proj = v.X * look.X + v.Y * look.Y + v.Z * look.Z
+                                    if proj > 1.5 and proj < closest_dist then
+                                        local rx = cam_pos.X + look.X * proj
+                                        local ry = cam_pos.Y + look.Y * proj
+                                        local rz = cam_pos.Z + look.Z * proj
+                                        if dist3(nb.X, nb.Y, nb.Z, rx, ry, rz) <= 4.0 then
+                                            closest_dist = proj
+                                            world.my_last_target_key = (en.hum and en.hum.Address) or ("npc_" .. ni)
+                                            world.my_last_target_name = en.name or "Scav"
+                                            world.my_last_target_pos = nb
+                                        end
+                                    end
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    else
+        local cur_ammo = get_local_ammo()
+        if cur_ammo ~= nil then
+            world.last_ammo = cur_ammo
+        end
+    end
+
+    if not is_tracer_on then return end
+    local cam_pos = camera.GetPosition()
+    local cam_look = camera.GetLookVector()
+    local i = 1
+    while i <= #world.tracers do
+        local tr = world.tracers[i]
+        local age = now - tr.created
+        if age >= max_dur then
+            table.remove(world.tracers, i)
+        else
+            local alpha = math.clamp(1.0 - (age / max_dur), 0, 1)
+            local p1 = tr.from
+            local p2 = tr.to
+
+            -- Near-plane clipping to prevent tracers from wrapping behind camera or snapping to center
+            local should_draw = true
+            local draw_p1 = p1
+            if cam_pos and cam_look then
+                local d1 = (p1.X - cam_pos.X) * cam_look.X + (p1.Y - cam_pos.Y) * cam_look.Y + (p1.Z - cam_pos.Z) * cam_look.Z
+                local d2 = (p2.X - cam_pos.X) * cam_look.X + (p2.Y - cam_pos.Y) * cam_look.Y + (p2.Z - cam_pos.Z) * cam_look.Z
+                if d2 <= 0.2 then
+                    should_draw = false
+                elseif d1 < 0.6 and d2 > 0.6 then
+                    local t = (0.6 - d1) / (d2 - d1)
+                    draw_p1 = Vector3.New(
+                        p1.X + (p2.X - p1.X) * t,
+                        p1.Y + (p2.Y - p1.Y) * t,
+                        p1.Z + (p2.Z - p1.Z) * t
+                    )
+                end
+            end
+
+            if should_draw then
+                local sx1, sy1, sv1 = draw.WorldToScreen(draw_p1.X, draw_p1.Y, draw_p1.Z)
+                local sx2, sy2, sv2 = draw.WorldToScreen(p2.X, p2.Y, p2.Z)
+
+                local r = tr_col[1] or 0.25
+                local g = tr_col[2] or 0.65
+                local b = tr_col[3] or 1.0
+
+                if sv2 then
+                    if not sv1 then
+                        local scx, scy = input.GetScreenCenter()
+                        if not scx or not scy then scx, scy = 960, 540 end
+                        sx1, sy1 = scx + 100, scy + 140
+                        sv1 = true
+                    end
+                    draw.Line(sx1, sy1, sx2, sy2, {r, g, b, alpha * 0.9}, 2)
+                    draw.Line(sx1, sy1, sx2, sy2, {1, 1, 1, alpha * 0.95}, 1)
+                elseif sv1 then
+                    local sx2_raw, sy2_raw = draw.WorldToScreen(p2.X, p2.Y, p2.Z)
+                    if sx2_raw and sy2_raw then
+                        draw.Line(sx1, sy1, sx2_raw, sy2_raw, {r, g, b, alpha * 0.8}, 2)
+                    end
+                end
+            end
+
+            i = i + 1
+        end
+    end
+end
+
+local function draw_hit_logs()
+    local is_hl_on = cfg.hit_logs or menu.Get("b_hit_logs")
+    if not is_hl_on or #world.hit_logs == 0 then return end
+    local now = os.clock()
+    local scx, scy = input.GetScreenCenter()
+    if not scx or not scy then scx, scy = 960, 540 end
+    local y_start = scy + 45
+    local i = 1
+    while i <= #world.hit_logs do
+        local log = world.hit_logs[i]
+        local age = now - log.created
+        if age >= log.lifetime then
+            table.remove(world.hit_logs, i)
+        else
+            local alpha = math.clamp(1.0 - (age / log.lifetime), 0, 1)
+            local tw, th = draw.GetTextSize(log.text, 12)
+            tw = (type(tw) == "number" and tw > 0 and tw) or (#log.text * 7.5)
+            local pad_x = 10
+            local pad_y = 3
+            local box_w = tw + pad_x * 2
+            local box_h = 20
+            local lx = scx - math.floor(box_w / 2)
+            local ly = y_start + (i - 1) * 23
+
+            draw.RectFilled(lx, ly, box_w, box_h, {0.04, 0.04, 0.06, alpha * 0.88}, 3)
+            draw.Rect(lx, ly, box_w, box_h, {0.25, 0.65, 1.0, alpha * 0.75}, 3, 1)
+
+            draw.Text(lx + pad_x + 1, ly + pad_y + 1, log.text, {0, 0, 0, alpha * 0.95}, 12)
+            draw.Text(lx + pad_x, ly + pad_y, log.text, {0.55, 0.9, 1.0, alpha}, 12)
+            i = i + 1
+        end
+    end
+end
+
+local function draw_hitmarker()
+    local is_hm_on = cfg.hitmarker or menu.Get("b_hitmarker")
+    if not is_hm_on or not world.hitmarker then return end
+    local elapsed = os.clock() - world.hitmarker.time
+    if elapsed >= 0.55 then
+        world.hitmarker = nil
+        return
+    end
+    local alpha = math.clamp(1.0 - (elapsed / 0.55), 0, 1)
+    local s = 11
+    local gap = 3
+    local is_head = world.hitmarker.is_head
+    local col = is_head and {1.0, 0.22, 0.22, alpha} or {1.0, 1.0, 1.0, alpha}
+    local shadow_col = {0.0, 0.0, 0.0, alpha * 0.9}
+
+    -- Always draw crisp crosshair hitmarker at screen center
+    local cx, cy = input.GetScreenCenter()
+    if not cx or not cy then cx, cy = 960, 540 end
+
+    -- Dark background shadow for contrast on any background
+    draw.Line(cx - s, cy - s, cx - gap, cy - gap, shadow_col, 3.5)
+    draw.Line(cx + gap, cy + gap, cx + s, cy + s, shadow_col, 3.5)
+    draw.Line(cx + s, cy - s, cx + gap, cy - gap, shadow_col, 3.5)
+    draw.Line(cx - gap, cy + gap, cx - s, cy + s, shadow_col, 3.5)
+
+    -- Bright foreground hitmarker lines
+    draw.Line(cx - s, cy - s, cx - gap, cy - gap, col, 2.0)
+    draw.Line(cx + gap, cy + gap, cx + s, cy + s, col, 2.0)
+    draw.Line(cx + s, cy - s, cx + gap, cy - gap, col, 2.0)
+    draw.Line(cx - gap, cy + gap, cx - s, cy + s, col, 2.0)
+
+    -- If 3D hit position is available and on screen, also draw subtle 3D hit indicator
+    if world.hitmarker.pos then
+        local wx, wy, wv = draw.WorldToScreen(world.hitmarker.pos.X, world.hitmarker.pos.Y, world.hitmarker.pos.Z)
+        if wv and (math.abs(wx - cx) > 15 or math.abs(wy - cy) > 15) then
+            local ws = 6
+            draw.Line(wx - ws, wy - ws, wx + ws, wy + ws, col, 1.5)
+            draw.Line(wx + ws, wy - ws, wx - ws, wy + ws, col, 1.5)
+        end
+    end
+end
 
 local function draw_corpse_markers()
 if not cfg.corpse_x then return end
@@ -4607,8 +5925,7 @@ end
 
 
 
-local draw_nixware_menu
-do
+local draw_nixware_menu = (function()
 local ui = {
     visible = true,
     centered = false,
@@ -4626,41 +5943,36 @@ local ui = {
     bind_armed = false,
     binding_key = false,
     last_lmb = false,
-    last_toggle_key = false
+    last_toggle_key = false,
+    intro_start = tick(),
+    intro_done = false,
+    tabs = {
+        { icon = "A", label = "Aimbots" },
+        { icon = "E", label = "Visuals" },
+        { icon = "H", label = "Chams" },
+        { icon = "M", label = "Misc" },
+        { icon = "C", label = "Config" }
+    },
+    cfg_name_buf = "",
+    cfg_focus = false,
+    selected_cfg = "default",
+    cfg_files_list = {"default"},
+    last_keys = {},
+    prev_visible = false,
+    PALETTE = {
+        { name = "Red", col = {1.0, 0.25, 0.25, 1.0} },
+        { name = "Grn", col = {0.25, 0.95, 0.35, 1.0} },
+        { name = "Blu", col = {0.25, 0.65, 1.0, 1.0} },
+        { name = "Yel", col = {1.0, 0.90, 0.20, 1.0} },
+        { name = "Cyn", col = {0.15, 0.95, 1.0, 1.0} },
+        { name = "Mag", col = {1.0, 0.20, 0.85, 1.0} },
+        { name = "Pnk", col = {1.0, 0.45, 0.75, 1.0} },
+        { name = "Tur", col = {0.20, 0.90, 0.75, 1.0} },
+        { name = "Wht", col = {1.0, 1.0, 1.0, 1.0} },
+        { name = "Orn", col = {1.0, 0.55, 0.15, 1.0} }
+    }
 }
-
-local intro_start = tick()
-local intro_done = false
-
-local tabs = {
-    { icon = "A", label = "Aimbots" },
-    { icon = "E", label = "Visuals" },
-    { icon = "H", label = "Chams" },
-    { icon = "M", label = "Misc" },
-    { icon = "C", label = "Config" }
-}
-
-
-local cfg_name_buf = ""
-local cfg_focus = false
-local selected_cfg = "default"
-local cfg_files_list = {"default"}
-local last_keys = {}
-
-local ui_prev_visible = false
-
-local PALETTE = {
-    { name = "Red", col = {1.0, 0.25, 0.25, 1.0} },
-    { name = "Grn", col = {0.25, 0.95, 0.35, 1.0} },
-    { name = "Blu", col = {0.25, 0.65, 1.0, 1.0} },
-    { name = "Yel", col = {1.0, 0.90, 0.20, 1.0} },
-    { name = "Cyn", col = {0.15, 0.95, 1.0, 1.0} },
-    { name = "Mag", col = {1.0, 0.20, 0.85, 1.0} },
-    { name = "Pnk", col = {1.0, 0.45, 0.75, 1.0} },
-    { name = "Tur", col = {0.20, 0.90, 0.75, 1.0} },
-    { name = "Wht", col = {1.0, 1.0, 1.0, 1.0} },
-    { name = "Orn", col = {1.0, 0.55, 0.15, 1.0} }
-}
+world.menu_ui = ui
 
 
 
@@ -4673,7 +5985,7 @@ end
 
 pcall(function()
     if read_config_list then
-        cfg_files_list = read_config_list()
+        ui.cfg_files_list = read_config_list()
     end
 end)
 
@@ -4694,8 +6006,8 @@ local function draw_menu()
         end
     end
 
-    if not intro_done then
-        local el = now_t - intro_start
+    if not ui.intro_done then
+        local el = now_t - (ui.intro_start or now_t)
         if el < 2.5 then
             local scx, scy = input.GetScreenCenter()
             local sw = scx * 2
@@ -4718,11 +6030,20 @@ local function draw_menu()
             draw.Text(scx - math.floor(tw / 2), scy - 18, t, {1.0, 1.0, 1.0, a}, 30)
             draw.Text(scx - math.floor(sw_txt / 2), scy + 34, sub, {0.7, 0.7, 0.75, a * 0.85}, 13)
         else
-            intro_done = true
+            ui.intro_done = true
         end
     end
 
-    local mx, my = input.GetMousePosition()
+    local mx, my = nil, nil
+    if input and type(input.GetMousePosition) == "function" then
+        pcall(function() mx, my = input.GetMousePosition() end)
+    end
+    if not mx and utility and type(utility.GetMousePos) == "function" then
+        pcall(function() mx, my = utility.GetMousePos() end)
+    end
+    if not mx and input and type(input.GetMousePos) == "function" then
+        pcall(function() mx, my = input.GetMousePos() end)
+    end
     mx = (type(mx) == "number" and mx) or 0
     my = (type(my) == "number" and my) or 0
 
@@ -4773,32 +6094,32 @@ local function draw_menu()
                 local mouse_vks = {0x02, 0x01, 0x04, 0x05, 0x06}
                 for _, mvk in ipairs(mouse_vks) do
                     local is_down = input.IsKeyDown(mvk)
-                    if is_down and not last_keys[mvk] then
+                    if is_down and not ui.last_keys[mvk] then
                         found_vk = mvk
                         break
                     end
-                    last_keys[mvk] = is_down
+                    ui.last_keys[mvk] = is_down
                 end
                 if not found_vk then
                     local specific_mods = {0xA1, 0xA0, 0xA3, 0xA2, 0xA5, 0xA4, 0x20, 0x09, 0x14}
                     for _, mvk in ipairs(specific_mods) do
                         local is_down = input.IsKeyDown(mvk)
-                        if is_down and not last_keys[mvk] then
+                        if is_down and not ui.last_keys[mvk] then
                             found_vk = mvk
                             break
                         end
-                        last_keys[mvk] = is_down
+                        ui.last_keys[mvk] = is_down
                     end
                 end
                 if not found_vk then
                     for vk = 0x08, 0xFE do
                         if vk ~= 0x10 and vk ~= 0x11 and vk ~= 0x12 then
                             local is_down = input.IsKeyDown(vk)
-                            if is_down and not last_keys[vk] then
+                            if is_down and not ui.last_keys[vk] then
                                 found_vk = vk
                                 break
                             end
-                            last_keys[vk] = is_down
+                            ui.last_keys[vk] = is_down
                         end
                     end
                 end
@@ -4813,7 +6134,7 @@ local function draw_menu()
                     end
                     ui.active_bind = nil
                     ui.bind_armed = false
-                    last_keys[found_vk] = true
+                    ui.last_keys[found_vk] = true
                 end
             end
         end
@@ -4841,8 +6162,8 @@ local function draw_menu()
     ui.last_toggle_key = toggle_down
 
     if not ui.visible then
-        if ui_prev_visible then
-            ui_prev_visible = false
+        if ui.prev_visible then
+            ui.prev_visible = false
             pcall(function()
                 local uis = game:GetService("UserInputService")
                 if uis then
@@ -4852,35 +6173,134 @@ local function draw_menu()
                     uis.MouseBehavior = Enum.MouseBehavior.LockCenter
                     uis.MouseIconEnabled = false
                 end
+                -- Restore camera to normal
+                local cam = workspace.CurrentCamera
+                if cam then
+                    cam.CameraType = ui.saved_cam_type or Enum.CameraType.Custom
+                end
+                -- Re-enable PD's camera controller scripts
+                local lp = game.Players.LocalPlayer
+                if lp and lp.Character then
+                    local omi = lp.Character:FindFirstChild("Override_MobileInput")
+                    if omi then
+                        for _, child in ipairs(omi:GetChildren()) do
+                            if child:IsA("LocalScript") then
+                                child.Disabled = false
+                            end
+                        end
+                    end
+                end
+                -- Re-enable PlayerModule camera script
+                if ui.saved_cam_script then
+                    pcall(function() ui.saved_cam_script.Disabled = false end)
+                    ui.saved_cam_script = nil
+                end
                 local cas = game:GetService("ContextActionService")
                 if cas then
                     cas:UnbindAction("BobaMenuSink")
+                    cas:UnbindAction("BobaMoveSink")
                 end
+                pcall(function()
+                    local rs = game:GetService("RunService")
+                    if rs then
+                        rs:UnbindFromRenderStep("BobaCamLock")
+                    end
+                end)
             end)
         end
         ui.last_lmb = lmb
         return
     end
 
-    if not ui_prev_visible then
-        ui_prev_visible = true
+
+    if not ui.prev_visible then
+        ui.prev_visible = true
         pcall(function()
-            local uis = game:GetService("UserInputService")
-            if uis then
-                uis.MouseBehavior = Enum.MouseBehavior.Default
-                uis.MouseIconEnabled = true
-                if Enum.OverrideMouseIconBehavior then
-                    uis.OverrideMouseIconBehavior = Enum.OverrideMouseIconBehavior.ForceShow
+            -- Save current camera state before freezing
+            local cam = workspace.CurrentCamera
+            if cam then
+                ui.saved_cam_type = cam.CameraType
+                ui.saved_cam_cf = cam.CFrame
+            end
+            -- Disable PD's camera controller scripts so they stop fighting us
+            local lp = game.Players.LocalPlayer
+            if lp and lp.Character then
+                local omi = lp.Character:FindFirstChild("Override_MobileInput")
+                if omi then
+                    for _, child in ipairs(omi:GetChildren()) do
+                        if child:IsA("LocalScript") then
+                            child.Disabled = true
+                        end
+                    end
                 end
             end
+            -- Also disable any PlayerModule camera scripts
+            pcall(function()
+                local pm = lp.PlayerScripts:FindFirstChild("PlayerModule")
+                if pm then
+                    local cc = pm:FindFirstChild("CameraModule") or pm:FindFirstChild("CameraController")
+                    if cc and cc:IsA("LocalScript") then
+                        ui.saved_cam_script = cc
+                        cc.Disabled = true
+                    end
+                end
+            end)
             local cas = game:GetService("ContextActionService")
             if cas then
+                -- Sink mouse clicks, movement, and wheel so Roblox camera doesn't rotate
                 cas:BindActionAtPriority("BobaMenuSink", function()
                     return Enum.ContextActionResult.Sink
-                end, false, 10000, Enum.UserInputType.MouseButton1, Enum.UserInputType.MouseButton2, Enum.UserInputType.MouseButton3)
+                end, false, 10000,
+                    Enum.UserInputType.MouseButton1,
+                    Enum.UserInputType.MouseButton2,
+                    Enum.UserInputType.MouseButton3,
+                    Enum.UserInputType.MouseMovement,
+                    Enum.UserInputType.MouseWheel)
+                -- Sink WASD + Space + Shift to prevent movement
+                cas:BindActionAtPriority("BobaMoveSink", function()
+                    return Enum.ContextActionResult.Sink
+                end, false, 10000,
+                    Enum.KeyCode.W, Enum.KeyCode.A, Enum.KeyCode.S, Enum.KeyCode.D,
+                    Enum.KeyCode.Space, Enum.KeyCode.LeftShift, Enum.KeyCode.RightShift)
             end
+            pcall(function()
+                local rs = game:GetService("RunService")
+                if rs then
+                    rs:BindToRenderStep("BobaCamLock", Enum.RenderPriority.Camera.Value + 10, function()
+                        local cam = workspace.CurrentCamera
+                        if cam and ui.saved_cam_cf then
+                            cam.CameraType = Enum.CameraType.Scriptable
+                            cam.CFrame = ui.saved_cam_cf
+                        end
+                    end)
+                end
+            end)
         end)
     end
+
+    -- Re-apply camera freeze + cursor unlock EVERY FRAME while menu is open
+    -- PD's camera scripts fight these settings, so we brute-force override
+    pcall(function()
+        local uis = game:GetService("UserInputService")
+        if uis then
+            uis.MouseBehavior = Enum.MouseBehavior.Default
+            uis.MouseIconEnabled = true
+            if Enum.OverrideMouseIconBehavior then
+                uis.OverrideMouseIconBehavior = Enum.OverrideMouseIconBehavior.ForceShow
+            end
+        end
+        -- Freeze camera — force CameraType AND CFrame every frame
+        local cam = workspace.CurrentCamera
+        if cam then
+            cam.CameraType = Enum.CameraType.Scriptable
+            -- Lock CFrame to what it was when menu opened
+            if ui.saved_cam_cf then
+                cam.CFrame = ui.saved_cam_cf
+            end
+        end
+    end)
+
+
 
     local title_h = 28
     local px = ui.x
@@ -4913,7 +6333,7 @@ local function draw_menu()
     draw.Line(px, py + title_h, px + ui.w, py + title_h, {0.02, 0.02, 0.02, 1.0}, 1.0)
 
     draw.Text(px + 8, py + 3, "ProjectBoba", theme_col, 14)
-    local cur_tab_title = (tabs[ui.tab + 1] and tabs[ui.tab + 1].label) or "Menu"
+    local cur_tab_title = (ui.tabs[ui.tab + 1] and ui.tabs[ui.tab + 1].label) or "Menu"
     draw.Text(px + 315, py + 3, "[ " .. cur_tab_title .. " ]", theme_col, 14)
 
     local close_btn_w = 20
@@ -4934,7 +6354,7 @@ local function draw_menu()
     draw.RectFilled(side_x, side_y, side_w, side_h, side_tint, 0)
     draw.Rect(side_x, side_y, side_w, side_h, {0.02, 0.02, 0.02, 1.0}, 0, 1.5)
 
-    for i, t in ipairs(tabs) do
+    for i, t in ipairs(ui.tabs) do
         local tid = i - 1
         local tx = side_x + 2
         local ty = side_y + 10 + tid * 52
@@ -5119,7 +6539,7 @@ local function draw_checkbox(x, y, label, key)
         local cur_c = mc(color_id)
         local btn_w = math.floor((w - 16) / 5)
         local btn_h = 16
-        for i, p in ipairs(PALETTE) do
+        for i, p in ipairs(ui.PALETTE) do
             local col_idx = (i - 1) % 5
             local row_idx = math.floor((i - 1) / 5)
             local bx = x + col_idx * (btn_w + 4)
@@ -5171,20 +6591,41 @@ local function draw_checkbox(x, y, label, key)
         end)
 
         local col2_x = px + 322
-        draw_card(col2_x, py + 30, 236, 481, "Silent Aim")
-        draw_checkbox(col2_x + 12, py + 56, "Enable Silent Aim", "b_silent")
-        draw_cycle(col2_x + 12, py + 80, 212, "Silent Bone", "b_silent_bone", {"Head", "Chest", "Pelvis", "Closest", "Cycle"})
-        draw_slider("s_sil_fov", col2_x + 12, py + 104, 212, "Silent FOV", "b_silent_fov", 30, 500, "%d deg")
-        draw_checkbox(col2_x + 12, py + 142, "Multi-Point (Bone Fallback)", "b_silent_multipoint")
-        draw_checkbox(col2_x + 12, py + 168, "Team Check", "b_silent_team")
-        draw_checkbox(col2_x + 12, py + 214, "Draw Silent FOV", "b_silent_fov_draw")
-        draw_checkbox(col2_x + 12, py + 238, "Filled FOV Circle", "b_silent_fov_filled")
-        draw.Text(col2_x + 12, py + 262, "Silent FOV Color:", theme_sub, 12)
-        draw_color_palette(col2_x + 12, py + 278, 212, "b_silent_fov", function(c)
-            cfg.sil_fov_c = c
+        draw_card(col2_x, py + 30, 236, 481, ui.tab0_mode == 1 and "Combat Visuals" or "Silent Aimbot")
+
+        local sub_btn_w = 104
+        draw_button(col2_x + 10, py + 56, sub_btn_w, 20, "Silent Aim", function()
+            ui.tab0_mode = 0
         end)
-        draw_checkbox(col2_x + 12, py + 370, "No Recoil", "b_no_recoil")
-        draw_slider("s_recoil_reduc", col2_x + 12, py + 396, 212, "Recoil Reduction", "b_recoil_reduc", 0, 100, "%d %%")
+        draw_button(col2_x + 122, py + 56, sub_btn_w, 20, "Combat Vis", function()
+            ui.tab0_mode = 1
+        end)
+
+        if ui.tab0_mode ~= 1 then
+            draw_checkbox(col2_x + 12, py + 84, "Enable Silent Aim", "b_silent")
+            draw_cycle(col2_x + 12, py + 110, 212, "Silent Bone", "b_silent_bone", {"Head", "Chest", "Pelvis", "Random"})
+            draw_slider("s_sil_fov", col2_x + 12, py + 136, 212, "Silent FOV", "b_silent_fov", 30, 500, "%d deg")
+            draw_checkbox(col2_x + 12, py + 174, "Multi-Point (Bone Fallback)", "b_silent_multipoint")
+            draw_checkbox(col2_x + 12, py + 200, "Team Check", "b_silent_team")
+            draw_checkbox(col2_x + 12, py + 226, "Draw Silent FOV", "b_silent_fov_draw")
+            draw_checkbox(col2_x + 12, py + 250, "Filled FOV Circle", "b_silent_fov_filled")
+            draw.Text(col2_x + 12, py + 276, "Silent FOV Color:", theme_sub, 12)
+            draw_color_palette(col2_x + 12, py + 294, 212, "b_silent_fov", function(c)
+                cfg.sil_fov_c = c
+            end)
+            draw_checkbox(col2_x + 12, py + 348, "No Recoil", "b_no_recoil")
+            draw_slider("s_recoil_reduc", col2_x + 12, py + 374, 212, "Recoil Reduction", "b_recoil_reduc", 0, 100, "%d %%")
+        else
+            draw_checkbox(col2_x + 12, py + 86, "Bullet Tracers", "b_bullet_tracers")
+            draw_slider("s_tracer_dur", col2_x + 12, py + 112, 212, "Tracer Duration", "b_tracer_duration", 0.2, 5.0, "%.1f s")
+            draw.Text(col2_x + 12, py + 152, "Tracer Color:", theme_sub, 12)
+            draw_color_palette(col2_x + 12, py + 168, 212, "b_bullet_tracers", function(c)
+                cfg.tracer_c = c
+            end)
+            draw_checkbox(col2_x + 12, py + 224, "Hit Markers", "b_hitmarker")
+            draw_checkbox(col2_x + 12, py + 250, "Hit Logs", "b_hit_logs")
+            draw_slider("s_hit_dur", col2_x + 12, py + 276, 212, "Hit Log Duration", "b_hit_log_duration", 1.0, 10.0, "%.1f s")
+        end
 
         local col3_x = px + 566
         draw_card(col3_x, py + 30, 240, 481, "NPC Aimbot")
@@ -5204,22 +6645,22 @@ local function draw_checkbox(x, y, label, key)
     elseif ui.tab == 1 then
         local col1_x = px + 78
         draw_card(col1_x, py + 30, 236, 481, "Player ESP")
-        draw_checkbox(col1_x + 12, py + 60, "Enable Player ESP", "b_esp")
-        draw_checkbox(col1_x + 12, py + 86, "Box ESP", "b_esp_box")
-        draw_checkbox(col1_x + 12, py + 112, "Skeleton ESP", "b_esp_skel")
-        draw_checkbox(col1_x + 12, py + 138, "Health Bar", "b_esp_hp")
-        draw_checkbox(col1_x + 12, py + 164, "Name ESP", "b_esp_name")
-        draw_checkbox(col1_x + 12, py + 190, "Distance ESP", "b_esp_dist")
-        draw_checkbox(col1_x + 12, py + 216, "Weapon ESP", "b_esp_weapon")
-        draw_checkbox(col1_x + 12, py + 228, "Snaplines", "b_esp_snap")
-        draw_checkbox(col1_x + 12, py + 252, "Player Loadout ESP", "b_loadout_esp")
-        draw_slider("s_loadout_sz", col1_x + 12, py + 278, 212, "Loadout Size (px)", "b_loadout_sz", 24, 56, "%d px")
-        draw_slider("s_esp_r", col1_x + 12, py + 318, 212, "Player Range (m)", "b_esp_range", 50, 5000, "%d m")
+        draw_checkbox(col1_x + 12, py + 56, "Enable Player ESP", "b_esp")
+        draw_checkbox(col1_x + 12, py + 80, "Box ESP", "b_esp_box")
+        draw_checkbox(col1_x + 12, py + 104, "Skeleton ESP", "b_esp_skel")
+        draw_checkbox(col1_x + 12, py + 128, "Health Bar", "b_esp_hp")
+        draw_checkbox(col1_x + 12, py + 152, "Name ESP", "b_esp_name")
+        draw_checkbox(col1_x + 12, py + 176, "Distance ESP", "b_esp_dist")
+        draw_checkbox(col1_x + 12, py + 200, "Weapon ESP", "b_esp_weapon")
+        draw_checkbox(col1_x + 12, py + 224, "Snaplines", "b_esp_snap")
+        draw_checkbox(col1_x + 12, py + 248, "Player Loadout ESP", "b_loadout_esp")
+        draw_slider("s_loadout_sz", col1_x + 12, py + 272, 212, "Loadout Size (px)", "b_loadout_sz", 24, 56, "%d px")
+        draw_slider("s_esp_r", col1_x + 12, py + 306, 212, "Player Range (m)", "b_esp_range", 50, 5000, "%d m")
 
-        draw.Text(col1_x + 12, py + 360, "Box Color:", theme_sub, 12)
-        draw_color_palette(col1_x + 12, py + 376, 212, "b_esp_box", nil)
-        draw.Text(col1_x + 12, py + 418, "Snapline Color:", theme_sub, 12)
-        draw_color_palette(col1_x + 12, py + 434, 212, "b_esp_snap", nil)
+        draw.Text(col1_x + 12, py + 346, "Box Color:", theme_sub, 12)
+        draw_color_palette(col1_x + 12, py + 362, 212, "b_esp_box", nil)
+        draw.Text(col1_x + 12, py + 412, "Snapline Color:", theme_sub, 12)
+        draw_color_palette(col1_x + 12, py + 428, 212, "b_esp_snap", nil)
 
         local col2_x = px + 322
         draw_card(col2_x, py + 30, 236, 481, "NPC & Extraction")
@@ -5282,10 +6723,9 @@ local function draw_checkbox(x, y, label, key)
         draw_checkbox(col1_x + 12, py + 112, "Show Armor", "b_inv_armor")
         draw_checkbox(col1_x + 12, py + 138, "Show Special Items", "b_inv_special")
         draw_checkbox(col1_x + 12, py + 164, "Show Misc Items", "b_inv_misc")
-        draw_checkbox(col1_x + 12, py + 196, "Cheater Finder (1.5+ KD)", "b_cheater_finder")
-        draw_checkbox(col1_x + 12, py + 222, "Server Loot Finder (SLF)", "b_slf")
-        draw_checkbox(col1_x + 12, py + 248, "Boss Tracker", "b_boss")
-        draw_checkbox(col1_x + 12, py + 274, "Mod Alert", "b_mod_alert")
+        draw_checkbox(col1_x + 12, py + 196, "Cheater Finder", "b_cheater_finder")
+        draw_checkbox(col1_x + 12, py + 222, "Boss Tracker", "b_boss")
+        draw_checkbox(col1_x + 12, py + 248, "Mod Alert", "b_mod_alert")
 
         local col2_x = px + 322
         draw_card(col2_x, py + 30, 236, 481, "FOV Changer & World")
@@ -5293,8 +6733,9 @@ local function draw_checkbox(x, y, label, key)
         draw_slider("s_fov_v", col2_x + 12, py + 86, 212, "Field of View", "b_fov_val", 70, 110, "%d deg")
         draw_checkbox(col2_x + 12, py + 124, "Preserve Sniper Zoom (<35°)", "b_fov_ads_safe")
         draw_checkbox(col2_x + 12, py + 154, "Remove Grass (No Grass)", "b_nograss")
-        draw_checkbox(col2_x + 12, py + 180, "Claymore ESP", "b_claymore")
-        draw_checkbox(col2_x + 12, py + 206, "Car ESP", "b_car")
+        draw_checkbox(col2_x + 12, py + 180, "Remove Foliage", "b_remove_foliage")
+        draw_checkbox(col2_x + 12, py + 206, "Claymore ESP", "b_claymore")
+        draw_checkbox(col2_x + 12, py + 232, "Car ESP", "b_car")
 
         local col3_x = px + 566
         draw_card(col3_x, py + 30, 240, 481, "Skin Changer")
@@ -5338,74 +6779,74 @@ local function draw_checkbox(x, y, label, key)
         local ibh = 22
         local ib_hov = mx >= ibx and mx <= ibx + ibw and my >= iby and my <= iby + ibh
         if is_click then
-            cfg_focus = ib_hov
+            ui.cfg_focus = ib_hov
                     end
 
-        if cfg_focus then
+        if ui.cfg_focus then
             for vk = 0x41, 0x5A do
                 local down = input.IsKeyDown(vk)
-                if down and not last_keys[vk] then
-                    cfg_name_buf = cfg_name_buf .. string.char(vk + 32)
+                if down and not ui.last_keys[vk] then
+                    ui.cfg_name_buf = ui.cfg_name_buf .. string.char(vk + 32)
                 end
-                last_keys[vk] = down
+                ui.last_keys[vk] = down
             end
             for vk = 0x30, 0x39 do
                 local down = input.IsKeyDown(vk)
-                if down and not last_keys[vk] then
-                    cfg_name_buf = cfg_name_buf .. string.char(vk)
+                if down and not ui.last_keys[vk] then
+                    ui.cfg_name_buf = ui.cfg_name_buf .. string.char(vk)
                 end
-                last_keys[vk] = down
+                ui.last_keys[vk] = down
             end
             local bs_down = input.IsKeyDown(0x08)
-            if bs_down and not last_keys[0x08] and #cfg_name_buf > 0 then
-                cfg_name_buf = cfg_name_buf:sub(1, -2)
+            if bs_down and not ui.last_keys[0x08] and #ui.cfg_name_buf > 0 then
+                ui.cfg_name_buf = ui.cfg_name_buf:sub(1, -2)
             end
-            last_keys[0x08] = bs_down
+            ui.last_keys[0x08] = bs_down
             local sp_down = input.IsKeyDown(0x20) or input.IsKeyDown(0xBD)
-            if sp_down and not last_keys[0x20] then
-                cfg_name_buf = cfg_name_buf .. "_"
+            if sp_down and not ui.last_keys[0x20] then
+                ui.cfg_name_buf = ui.cfg_name_buf .. "_"
             end
-            last_keys[0x20] = sp_down
+            ui.last_keys[0x20] = sp_down
         end
 
-        draw.RectFilled(ibx, iby, ibw, ibh, cfg_focus and {0.14, 0.15, 0.18, 1.0} or {0.05, 0.05, 0.07, 1.0}, 0)
-        draw.Rect(ibx, iby, ibw, ibh, cfg_focus and theme_col or {0.02, 0.02, 0.02, 1.0}, 0, 1.0)
-        draw.Text(ibx + 6, iby + 3, cfg_name_buf .. (cfg_focus and "_" or ""), theme_col, 12)
+        draw.RectFilled(ibx, iby, ibw, ibh, ui.cfg_focus and {0.14, 0.15, 0.18, 1.0} or {0.05, 0.05, 0.07, 1.0}, 0)
+        draw.Rect(ibx, iby, ibw, ibh, ui.cfg_focus and theme_col or {0.02, 0.02, 0.02, 1.0}, 0, 1.0)
+        draw.Text(ibx + 6, iby + 3, ui.cfg_name_buf .. (ui.cfg_focus and "_" or ""), theme_col, 12)
 
         draw_button(col1_x + 12, py + 98, 331, 22, "Create / Save Config", function()
-            local cname = (cfg_name_buf ~= "") and cfg_name_buf or (selected_cfg ~= "" and selected_cfg or "default")
+            local cname = (ui.cfg_name_buf ~= "") and ui.cfg_name_buf or (ui.selected_cfg ~= "" and ui.selected_cfg or "default")
             save_config(cname)
             local exists = false
-            for _, cn in ipairs(cfg_files_list) do
+            for _, cn in ipairs(ui.cfg_files_list) do
                 if cn == cname then exists = true; break end
             end
             if not exists then
-                table.insert(cfg_files_list, cname)
-                write_config_list(cfg_files_list)
+                table.insert(ui.cfg_files_list, cname)
+                write_config_list(ui.cfg_files_list)
             end
-            selected_cfg = cname
-            cfg_name_buf = cname
+            ui.selected_cfg = cname
+            ui.cfg_name_buf = cname
         end)
 
         draw_button(col1_x + 12, py + 124, 105, 22, "Load Config", function()
-            local cname = (selected_cfg ~= "") and selected_cfg or "default"
+            local cname = (ui.selected_cfg ~= "") and ui.selected_cfg or "default"
             load_config(cname)
-            cfg_name_buf = cname
+            ui.cfg_name_buf = cname
         end)
 
         draw_button(col1_x + 122, py + 124, 105, 22, "Delete Config", function()
             local new_list = {}
-            for _, cn in ipairs(cfg_files_list) do
-                if cn ~= selected_cfg then
+            for _, cn in ipairs(ui.cfg_files_list) do
+                if cn ~= ui.selected_cfg then
                     table.insert(new_list, cn)
                 end
             end
             if #new_list == 0 then new_list = {"default"} end
-            cfg_files_list = new_list
-            write_config_list(cfg_files_list)
-            selected_cfg = cfg_files_list[1]
-            cfg_name_buf = selected_cfg
-            notify.Warning("Config Removed", selected_cfg, 3)
+            ui.cfg_files_list = new_list
+            write_config_list(ui.cfg_files_list)
+            ui.selected_cfg = ui.cfg_files_list[1]
+            ui.cfg_name_buf = ui.selected_cfg
+            notify.Warning("Config Removed", ui.selected_cfg, 3)
         end)
 
         draw_button(col1_x + 232, py + 124, 111, 22, "Reset All", function()
@@ -5424,10 +6865,10 @@ local function draw_checkbox(x, y, label, key)
         draw.RectFilled(list_x, list_y, list_w, list_h, {0.05, 0.05, 0.07, 0.9}, 0)
         draw.Rect(list_x, list_y, list_w, list_h, {0.02, 0.02, 0.02, 1.0}, 0, 1.0)
 
-        for i, cname in ipairs(cfg_files_list) do
+        for i, cname in ipairs(ui.cfg_files_list) do
             local ry = list_y + 2 + (i - 1) * 20
             if ry + 18 <= list_y + list_h then
-                local is_sel = (selected_cfg == cname)
+                local is_sel = (ui.selected_cfg == cname)
                 local r_hov = mx >= list_x + 2 and mx <= list_x + list_w - 2 and my >= ry and my <= ry + 18
 
                 if is_sel then
@@ -5441,8 +6882,8 @@ local function draw_checkbox(x, y, label, key)
                 end
 
                 if is_click and r_hov then
-                    selected_cfg = cname
-                    cfg_name_buf = cname
+                    ui.selected_cfg = cname
+                    ui.cfg_name_buf = cname
                 end
             end
         end
@@ -5533,11 +6974,10 @@ local function draw_checkbox(x, y, label, key)
     ui.last_lmb = lmb
 end
 
-draw_nixware_menu = draw_menu
-end
+return draw_menu
+end)()
 
-local draw_player_loadout
-do
+local draw_player_loadout = (function()
     local loadout_ui = {
         x = 420,
         y = 120,
@@ -5776,9 +7216,8 @@ do
     local function get_icon(name)
         local icon_name = resolve_icon_name(name)
         if not icon_name then return nil end
-        local h = img_handles[icon_name]
-        if h then
-            return h
+        if img_handles[icon_name] ~= nil then
+            return img_handles[icon_name] or nil
         end
         local url = "https://cdn.jsdelivr.net/gh/boqnpenev1-design/delta-itemss@main/" .. icon_name .. ".png"
         local ok, ret = pcall(draw.LoadImage, url)
@@ -5792,20 +7231,9 @@ do
             img_handles[icon_name] = ret2
             return ret2
         end
-        local local_url = "http://127.0.0.1:28751/" .. icon_name .. ".png"
-        local ok3, ret3 = pcall(draw.LoadImage, local_url)
-        if ok3 and ret3 then
-            img_handles[icon_name] = ret3
-            return ret3
-        end
+        img_handles[icon_name] = false
         return nil
     end
-
-    pcall(function()
-        for kn in pairs(KNOWN_IMAGES) do
-            get_icon(kn)
-        end
-    end)
 
     local function get_inst_name(val)
         if not val then return nil end
@@ -6030,7 +7458,7 @@ do
         return top_row, bot_row, active_tool
     end
 
-    draw_player_loadout = function()
+    local function draw_player_loadout_impl()
         if not get_val("b_loadout_esp", false) then return end
 
         if not loadout_ui.initialized then
@@ -6236,7 +7664,8 @@ do
             end
         end
     end
-end
+    return draw_player_loadout_impl
+end)()
 
 
 _G.on_frame = function()
@@ -6252,6 +7681,7 @@ end
 
 if panic_on then return end
 
+pcall(cache_cfg)
 pcall(run_fov_changer)
 
 pcall(run_wep_chams)
@@ -6274,18 +7704,26 @@ pcall(draw_inventory)
 pcall(draw_claymores)
 pcall(draw_cars)
 pcall(draw_radar)
+pcall(update_hacker_detector)
+pcall(check_combat_hits)
 pcall(draw_hitmarker)
+pcall(draw_bullet_tracers)
+pcall(draw_hit_logs)
 pcall(draw_corpse_markers)
 pcall(draw_boss_panel)
 pcall(draw_mod_alert)
-pcall(draw_slf_panel)
+pcall(draw_cheater_panel)
 pcall(draw_player_loadout)
 local m_ok, m_err = pcall(draw_nixware_menu)
 if not m_ok and m_err then
     print("[BOBA MENU ERROR] " .. tostring(m_err))
 end
 end
+OnFrame = _G.on_frame
+on_frame = _G.on_frame
+onFrame = _G.on_frame
 _G.OnFrame = _G.on_frame
+_G.on_frame = _G.on_frame
 _G.onFrame = _G.on_frame
 
 
@@ -6294,16 +7732,18 @@ thread.Create(scan_world_items, 10000)
 thread.Create(scan_quests, 20000)
 thread.Create(scan_npcs, 3500)
 thread.Create(scan_players, 5000)
-thread.Create(scan_extracts, 30000)
+thread.Create(scan_extracts, 10000)
 thread.Create(scan_hazards, 20000)
 thread.Create(scan_claymores, 10000)
-thread.Create(scan_cars, 10000)
+thread.Create(scan_cars, 5000)
 
-thread.Create(apply_world_mods, 5000)
+thread.Create(function()
+    pcall(apply_world_mods)
+    pcall(apply_foliage_mods)
+end, 3000)
 
 thread.Create(update_bosses, 2500)
 thread.Create(update_mod_check, 2500)
-thread.Create(slf_scan, 3000)
 thread.Create(cache_cfg, 1500)
 
 
@@ -6350,7 +7790,9 @@ notify.Success("BOBA loaded", "Project Delta Suite")
 print("[BOBA] loaded — " .. entity.GetPlayerCount() .. " players online")
 pcall(function()
     local act = read_active_cfg and read_active_cfg() or "default"
-    selected_cfg = act
-    cfg_name_buf = act
+    if world.menu_ui then
+        world.menu_ui.selected_cfg = act
+        world.menu_ui.cfg_name_buf = act
+    end
     load_config(act)
 end)
