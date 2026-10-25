@@ -1,5 +1,15 @@
 
-local save_config, load_config, apply_skins_now, auto_apply_skins, is_gun_equipped
+if thread and thread.StopAll then
+    pcall(thread.StopAll)
+end
+if _G.boba_connections then
+    for _, conn in ipairs(_G.boba_connections) do
+        pcall(function() conn:Disconnect() end)
+    end
+end
+_G.boba_connections = {}
+
+local save_config, load_config, apply_skins_now, auto_apply_skins, is_gun_equipped, boba_store, boba_colors
 
 if type(tick) ~= "function" then
     tick = function()
@@ -11,9 +21,7 @@ if type(tick) ~= "function" then
     end
 end
 
-
-do
-local boba_store = {
+boba_store = {
     b_aim = false,
     b_aim_key = 0x02,
     b_npc_aim_key = 0x02,
@@ -124,7 +132,7 @@ local boba_store = {
     b_radar = false,
     b_radar_sz = 180,
     b_radar_range = 150,
-    b_radar_rot = true,
+    b_radar_rot = false,
     b_hitmarker = false,
     b_corpse_x = false,
 
@@ -158,33 +166,79 @@ local boba_store = {
     b_rainbow_mode = false
 }
 
-local boba_colors = {
+boba_colors = {
+    b_bullet_tracers = {1.0, 0.8, 0, 0.8},
+    b_bullet_tracer_c = {1.0, 0.8, 0, 0.8},
     b_esp_box = {1, 0.3, 0.3, 1},
+    b_esp_box_c = {1, 0.3, 0.3, 1},
     b_esp_skel = {1, 1, 1, 1},
+    b_esp_skel_c = {1, 1, 1, 1},
     b_esp_name = {1, 1, 1, 1},
+    b_esp_name_c = {1, 1, 1, 1},
+    b_esp_hp = {0.2, 1, 0.2, 1},
+    b_esp_hp_c = {0.2, 1, 0.2, 1},
+    b_esp_dist = {0.7, 0.7, 0.7, 1},
+    b_esp_dist_c = {0.7, 0.7, 0.7, 1},
+    b_esp_weapon = {1, 0.7, 0.3, 1},
+    b_esp_weapon_c = {1, 0.7, 0.3, 1},
+    b_esp_armor = {0.6, 0.85, 1, 1},
+    b_esp_armor_c = {0.6, 0.85, 1, 1},
     b_esp_snap = {0.4, 0.7, 1.0, 1.0},
+    b_esp_snap_c = {0.4, 0.7, 1.0, 1.0},
+    b_esp_vis_tag = {0.15, 1, 0.25, 1},
+    b_esp_vis_tag_c = {0.15, 1, 0.25, 1},
     b_esp_staff = {1, 0.2, 1, 1},
+    b_esp_staff_c = {1, 0.2, 1, 1},
     b_esp_hvt = {1, 0.85, 0.2, 1},
-    b_chams_vis = {0.0, 1.0, 0.3, 1},
-    b_chams_occ = {1.0, 0.25, 0.25, 1},
-    b_wep_chams = {0.2, 0.85, 1.0, 1.0},
-    b_npc_box = {1, 0.3, 0.3, 1},
-    b_npc_name = {1, 0.3, 0.3, 1},
-    b_npc_skel = {1, 1, 1, 1},
-    b_cont = {0.5, 0.5, 1, 1},
-    b_loot = {1, 0.8, 0, 1},
-    b_corpse = {0.8, 0.15, 0.15, 1},
-    b_quest = {1, 0.5, 1, 1},
+    b_esp_hvt_c = {1, 0.85, 0.2, 1},
+    b_chams_vis = {0.0, 1.0, 0.3, 0.8},
+    b_chams_occ = {1.0, 0.25, 0.25, 0.8},
+    b_npc_box = {1, 0.5, 0.2, 1},
+    b_npc_box_c = {1, 0.5, 0.2, 1},
+    b_npc_name = {1, 0.8, 0.4, 1},
+    b_npc_name_c = {1, 0.8, 0.4, 1},
+    b_npc_skel = {1, 0.6, 0.3, 0.8},
+    b_npc_skel_c = {1, 0.6, 0.3, 0.8},
+    b_npc_hp = {0.2, 1, 0.2, 1},
+    b_npc_hp_c = {0.2, 1, 0.2, 1},
+    b_npc_dist = {0.7, 0.7, 0.7, 1},
+    b_npc_dist_c = {0.7, 0.7, 0.7, 1},
+    b_cont = {0.2, 0.8, 1, 1},
+    b_cont_c = {0.2, 0.8, 1, 1},
+    b_cont_items = {0.85, 0.85, 0.85, 1},
+    b_cont_items_c = {0.85, 0.85, 0.85, 1},
+    b_loot = {0.4, 1, 0.4, 1},
+    b_loot_c = {0.4, 1, 0.4, 1},
+    b_corpse = {0.8, 0.2, 0.2, 1},
+    b_corpse_c = {0.8, 0.2, 0.2, 1},
+    b_corpse_items = {0.85, 0.85, 0.85, 1},
+    b_corpse_items_c = {0.85, 0.85, 0.85, 1},
+    b_quest = {1, 0.85, 0.2, 1},
+    b_quest_c = {1, 0.85, 0.2, 1},
     b_extract = {0.2, 1, 0.5, 1},
-    b_hazard = {1, 0.4, 0, 1},
-    b_cross = {0.25, 0.95, 0.35, 1},
+    b_extract_c = {0.2, 1, 0.5, 1},
+    b_hazard = {1, 0.3, 0.1, 1},
+    b_hazard_c = {1, 0.3, 0.1, 1},
+    b_cross = {0, 1, 0, 1},
+    b_cross_c = {0, 1, 0, 1},
+    b_hitmarker = {1, 1, 1, 1},
+    b_hitmarker_c = {1, 1, 1, 1},
+    b_hit_logs = {0.25, 0.65, 1.0, 1.0},
+    b_hit_logs_c = {0.25, 0.65, 1.0, 1.0},
     b_inspect = {0.4, 0.8, 1, 1},
-    b_claymore = {1, 0.3, 0.1, 1},
-    b_car = {0.4, 1, 0.4, 1},
+    b_inspect_c = {0.4, 0.8, 1, 1},
+    b_loadout_c = {0.4, 0.8, 1, 1},
+    b_claymore = {1, 0.2, 0.2, 1},
+    b_claymore_c = {1, 0.2, 0.2, 1},
+    b_car = {0.2, 0.6, 1, 1},
+    b_car_c = {0.2, 0.6, 1, 1},
     b_corpse_x = {1, 0, 0, 1},
     b_aim_fov = {1, 1, 1, 0.25},
     b_silent_fov = {1, 0.8, 0.2, 0.2},
-    b_npc_aim_fov = {1, 0.6, 0.6, 0.25}
+    b_npc_aim_fov = {1, 0.6, 0.2, 0.3},
+    b_aim_fov_c = {1, 1, 1, 0.25},
+    b_silent_fov_c = {1, 0.8, 0.2, 0.2},
+    b_npc_aim_fov_c = {1, 0.6, 0.2, 0.3}
 }
 
 if type(menu) ~= "table" then menu = {} end
@@ -192,37 +246,43 @@ local orig_m_get = menu.Get
 local orig_m_set = menu.Set
 local orig_m_gc = menu.GetColor
 local orig_m_sc = menu.SetColor
+local orig_m_gk = menu.GetKey
+local orig_m_sk = menu.SetKey
 
 menu.Get = function(id)
-    if boba_store[id] ~= nil then return boba_store[id] end
     if orig_m_get then
         local ok, v = pcall(orig_m_get, id)
         if ok and v ~= nil then return v end
     end
+    if boba_store and boba_store[id] ~= nil then return boba_store[id] end
     return false
 end
 
 menu.Set = function(id, val)
-    boba_store[id] = val
+    if boba_store then boba_store[id] = val end
     if orig_m_set then pcall(orig_m_set, id, val) end
 end
 
 menu.GetColor = function(id)
-    if boba_colors[id] ~= nil then return boba_colors[id] end
     if orig_m_gc then
         local ok, c = pcall(orig_m_gc, id)
-        if ok and c ~= nil then return c end
+        if ok and c ~= nil and type(c) == "table" and #c >= 3 then return c end
     end
+    if boba_colors and boba_colors[id] ~= nil then return boba_colors[id] end
     return {1, 1, 1, 1}
 end
 
 menu.SetColor = function(id, col)
-    boba_colors[id] = col
+    if boba_colors then boba_colors[id] = col end
     if orig_m_sc then pcall(orig_m_sc, id, col) end
 end
 
 menu.GetKey = function(id)
-    if boba_store[id] ~= nil then return boba_store[id] end
+    if orig_m_gk then
+        local ok, k = pcall(orig_m_gk, id)
+        if ok and k ~= nil and k ~= 0 then return k end
+    end
+    if boba_store and boba_store[id] ~= nil and type(boba_store[id]) == "number" then return boba_store[id] end
     return 0
 end
 
@@ -245,7 +305,6 @@ _G.ResetAllBobaOptions = function()
         end
         if _G.NixwareSyncVal then _G.NixwareSyncVal(k, boba_store[k]) end
     end
-end
 end
 
 local sqrt = math.sqrt
@@ -277,6 +336,12 @@ local SKEL = {
 {"LowerTorso","LeftUpperLeg"}, {"LowerTorso","RightUpperLeg"},
 {"LeftUpperLeg","LeftLowerLeg"}, {"RightUpperLeg","RightLowerLeg"},
 {"LeftLowerLeg","LeftFoot"}, {"RightLowerLeg","RightFoot"}
+}
+
+local SKEL_R6 = {
+{"Head","Torso"},
+{"Torso","Left Arm"}, {"Torso","Right Arm"},
+{"Torso","Left Leg"}, {"Torso","Right Leg"}
 }
 
 local BONE_MAP = {
@@ -412,20 +477,20 @@ QuadNVG="special", ONV9="special",
 }
 
 local function get_item_category(name)
+if not name then return "misc" end
 if ITEM_CAT[name] then return ITEM_CAT[name] end
 local lower = name:lower()
+local cat = "misc"
 if lower:find("gun") or lower:find("rifle") or lower:find("pistol")
 or lower:find("smg") or lower:find("sniper") or lower:find("shotgun") then
-return "weapon"
-end
-if lower:find("armor") or lower:find("vest") or lower:find("helmet")
+cat = "weapon"
+elseif lower:find("armor") or lower:find("vest") or lower:find("helmet")
 or lower:find("plate") or lower:find("visor")
 or lower:find("pants") or lower:find("shirt") or lower:find("glove")
 or lower:find("backpack") or lower:find("mask") or lower:find("hood")
 or lower:find("ghillie") then
-return "armor"
-end
-if lower:find("key") or lower:find("card") or lower:find("gold")
+cat = "armor"
+elseif lower:find("key") or lower:find("card") or lower:find("gold")
 or lower:find("plush") or lower:find("serum") or lower:find("gift")
 or lower:find("gpu") or lower:find("cpu") or lower:find("hdd")
 or lower:find("ssd") or lower:find("ram") or lower:find("token")
@@ -433,9 +498,10 @@ or lower:find("crown") or lower:find("statue") or lower:find("ring")
 or lower:find("ticket") or lower:find("intel") or lower:find("document")
 or lower:find("artifact") or lower:find("diamond") or lower:find("ruby")
 or lower:find("emerald") or lower:find("nvg") or lower:find("replica") then
-return "special"
+cat = "special"
 end
-return "misc"
+ITEM_CAT[name] = cat
+return cat
 end
 
 local OP_LOOT_MAP = {
@@ -469,6 +535,9 @@ SerumGreen=true, SerumPurple=true, SerumRed=true, SerumYellow=true,
 ImmunsterReactor=true
 }
 
+local OP_CACHE = {}
+local GOOD_CACHE = {}
+
 local function is_mag_or_trash(name)
 if not name or name == "" then return true end
 local low = name:lower()
@@ -480,14 +549,20 @@ end
 
 local function is_op_loot(name)
 if not name or name == "" then return false end
+if OP_CACHE[name] ~= nil then return OP_CACHE[name] end
 local base = name:match("^(.-)%s*x%d+$") or name
-if is_mag_or_trash(base) then return false end
-if OP_LOOT_MAP[base] then return true end
-local low = base:lower()
-if low:find("plush") or low:find("card") or low:find("gold") or low:find("ticket") or low:find("gpu") or low:find("dagr") then
-return true
+if is_mag_or_trash(base) then
+    OP_CACHE[name] = false
+    return false
 end
-return false
+if OP_LOOT_MAP[base] then
+    OP_CACHE[name] = true
+    return true
+end
+local low = base:lower()
+local res = (low:find("plush") or low:find("card") or low:find("gold") or low:find("ticket") or low:find("gpu") or low:find("dagr")) and true or false
+OP_CACHE[name] = res
+return res
 end
 
 local TRASH_ITEMS = {
@@ -506,17 +581,23 @@ AramidFabric=true, CottonFabric=true, LinenFabric=true, RipstopFabric=true
 
 local function is_good_item(name)
 if not name or name == "" then return false end
+if GOOD_CACHE[name] ~= nil then return GOOD_CACHE[name] end
 local base = name:match("^(.-)%s*x%d+$") or name
-if TRASH_ITEMS[base] or is_mag_or_trash(base) then return false end
-if OP_LOOT_MAP and OP_LOOT_MAP[base] then return true end
+if TRASH_ITEMS[base] or is_mag_or_trash(base) then
+    GOOD_CACHE[name] = false
+    return false
+end
+if OP_LOOT_MAP and OP_LOOT_MAP[base] then
+    GOOD_CACHE[name] = true
+    return true
+end
 local low = base:lower()
-if low:find("key") or low:find("card") or low:find("plush")
+local res = (low:find("key") or low:find("card") or low:find("plush")
 or low:find("dagr") or low:find("gold") or low:find("ticket") or low:find("gpu")
 or low:find("serum") or low:find("statue") or low:find("replica")
-or low:find("nvg") or low:find("scope") or low:find("suppressor") then
-return true
-end
-return false
+or low:find("nvg") or low:find("scope") or low:find("suppressor")) and true or false
+GOOD_CACHE[name] = res
+return res
 end
 
 local LOOT_PASS = {
@@ -555,7 +636,7 @@ local orig_light = nil
 local orig_grass = nil
 local panic_on = false
 local silent_ok = false
-local boba_menu_open = true
+local boba_menu_open = false
 
 local function is_any_menu_open()
     if boba_menu_open then return true end
@@ -632,43 +713,43 @@ local MOD_NAMES = {
 local opt = {}
 
 local function mg(id, def)
-    if opt[id] ~= nil then return opt[id] end
-    local ok, v = pcall(function() return menu.Get(id) end)
-    if ok and v ~= nil and v ~= false then
-        opt[id] = v
+    local ok, v = pcall(menu.Get, id)
+    if ok and v ~= nil then
         return v
     end
+    if boba_store and boba_store[id] ~= nil then
+        return boba_store[id]
+    end
     if def ~= nil then return def end
-    return ok and v or false
+    return false
 end
 
 local function mc(id, def)
-    local ok, c = pcall(function() return menu.GetColor(id) end)
-    if ok and c ~= nil then return c end
+    local ok, c = pcall(menu.GetColor, id)
+    if ok and c ~= nil and type(c) == "table" and #c >= 3 then
+        return c
+    end
+    if boba_colors and boba_colors[id] ~= nil then
+        return boba_colors[id]
+    end
     if def ~= nil then return def end
     return {1, 1, 1, 1}
 end
 
 local function mk(id, def)
-    local ok, k = pcall(function() return menu.GetKey(id) end)
-    if ok and k ~= nil then return k end
+    local ok, k = pcall(menu.GetKey, id)
+    if ok and k ~= nil and k ~= 0 then
+        return k
+    end
+    if boba_store and boba_store[id] ~= nil and type(boba_store[id]) == "number" then
+        return boba_store[id]
+    end
     if def ~= nil then return def end
     return 0
 end
 
 local function get_val(id, def)
-    if opt[id] ~= nil then return opt[id] end
-    if boba_store and boba_store[id] ~= nil then
-        opt[id] = boba_store[id]
-        return boba_store[id]
-    end
-    local ok, v = pcall(function() return menu.Get(id) end)
-    if ok and v ~= nil and v ~= false then
-        opt[id] = v
-        return v
-    end
-    if def ~= nil then return def end
-    return false
+    return mg(id, def)
 end
 
 local RS = game.ReplicatedStorage
@@ -707,7 +788,8 @@ local function apply_recoil()
 end
 
 local function set_val(id, val)
-    opt[id] = val
+    if opt then opt[id] = val end
+    if boba_store then boba_store[id] = val end
     pcall(function() menu.Set(id, val) end)
     if id == "b_aim" then cfg.aim = val
     elseif id == "b_aim_key" then cfg.aim_key = val
@@ -931,17 +1013,34 @@ local function check_player_visible(cam_pos, p)
     if raycast and raycast.IsVisible and cam_pos then
         local hp = p.HeadPosition
         if hp then
-            local ok_vis, vis = pcall(raycast.IsVisible, cam_pos, hp)
+            local ok_vis, vis = pcall(raycast.IsVisible, cam_pos.X, cam_pos.Y, cam_pos.Z, hp.X, hp.Y, hp.Z)
             if ok_vis and vis then return true end
         end
         local cp = p.Position
         if cp then
-            local chest = Vector3.New(cp.X, cp.Y + 0.8, cp.Z)
-            local ok_vis, vis = pcall(raycast.IsVisible, cam_pos, chest)
+            local ok_vis, vis = pcall(raycast.IsVisible, cam_pos.X, cam_pos.Y, cam_pos.Z, cp.X, cp.Y + 0.8, cp.Z)
             if ok_vis and vis then return true end
         end
     end
     return false
+end
+
+local vis_cache_frame = 0
+local vis_cache = {}
+local function get_cached_player_visible(cam_pos, p)
+    local cur_f = tick()
+    if (cur_f - vis_cache_frame) > 0.05 then
+        vis_cache_frame = cur_f
+        vis_cache = {}
+    end
+    local pid = p.UserId or p.Name or p.Address
+    if not pid then return check_player_visible(cam_pos, p) end
+    if vis_cache[pid] ~= nil then
+        return vis_cache[pid]
+    end
+    local v = check_player_visible(cam_pos, p)
+    vis_cache[pid] = v
+    return v
 end
 
 cached_ammo_lbl = nil
@@ -953,17 +1052,19 @@ local function get_local_ammo()
     end
 
     local now = utility.GetTickCount()
-    if not cached_ammo_lbl or not utility.IsValid(cached_ammo_lbl) or (now - last_ammo_lbl_check) > 300 then
-        last_ammo_lbl_check = now
-        cached_ammo_lbl = nil
-        pcall(function()
-            local lp = game.LocalPlayer or (game.Players and game.Players.LocalPlayer)
-            local pg = lp and lp:FindFirstChild("PlayerGui")
-            local mg = pg and (pg:FindFirstChild("MainGui") or pg:FindFirstChild("NoInsetGui"))
-            if mg then
-                cached_ammo_lbl = mg:FindFirstChild("Ammo", true)
-            end
-        end)
+    if not cached_ammo_lbl or not utility.IsValid(cached_ammo_lbl) then
+        if (now - last_ammo_lbl_check) > 3000 then
+            last_ammo_lbl_check = now
+            cached_ammo_lbl = nil
+            pcall(function()
+                local lp = game.LocalPlayer or (game.Players and game.Players.LocalPlayer)
+                local pg = lp and lp:FindFirstChild("PlayerGui")
+                local mg = pg and (pg:FindFirstChild("MainGui") or pg:FindFirstChild("NoInsetGui"))
+                if mg then
+                    cached_ammo_lbl = mg:FindFirstChild("Ammo", true)
+                end
+            end)
+        end
     end
     if cached_ammo_lbl and utility.IsValid(cached_ammo_lbl) then
         local ok, txt = pcall(function() return cached_ammo_lbl.Text end)
@@ -1008,40 +1109,45 @@ local CFG_IDS = {
 "b_esp","b_esp_style","b_esp_box","b_esp_skel","b_esp_hp","b_esp_hp_txt",
 "b_esp_name","b_esp_dist","b_esp_weapon","b_esp_snap","b_esp_range","b_esp_team",
 "b_esp_staff","b_esp_armor","b_esp_hvt","b_esp_vis_tag","b_loadout_esp","b_loadout_sz","b_loadout_x","b_loadout_y",
-"b_chams","b_chams_mode","b_chams_vc","b_wep_chams","b_wep_chams_style","b_wep_chams_pulse",
+"b_chams","b_chams_mode","b_chams_vc",
 "b_npc","b_npc_box","b_npc_hp","b_npc_name","b_npc_dist","b_npc_skel","b_npc_range",
 "b_cont","b_cont_items","b_cont_filter","b_cont_range",
 "b_loot","b_loot_range","b_loot_filter",
-"b_corpse","b_corpse_items","b_corpse_range",
+"b_corpse","b_corpse_items","b_corpse_range","b_corpse_r",
 "b_quest","b_quest_range",
 "b_extract","b_extract_range","b_hazard","b_hazard_range",
-"b_nograss","b_remove_foliage","b_bullet_tracers","b_tracer_duration","b_hit_logs","b_hit_log_duration",
+"b_bullet_tracers","b_tracer_duration","b_hitmarker","b_hit_logs","b_hit_log_duration",
 "b_aim","b_aim_key","b_npc_aim_key","b_aim_fov","b_aim_smooth","b_aim_bone","b_aim_vis_text","b_aim_pred",
 "b_aim_lead","b_aim_lock",
 "b_aim_vis","b_aim_team","b_aim_fov_draw","b_aim_fov_filled",
 "b_silent","b_silent_bone","b_silent_vis_text","b_silent_multipoint","b_silent_fov","b_silent_vis","b_silent_team","b_silent_fov_draw","b_silent_fov_filled",
 "b_no_recoil","b_recoil_reduc",
-"b_npc_aim","b_npc_aim_bone","b_npc_aim_fov","b_npc_aim_smooth","b_npc_aim_bone",
+"b_npc_aim","b_npc_aim_bone","b_npc_aim_fov","b_npc_aim_smooth",
 "b_npc_aim_pred","b_npc_aim_fov_draw","b_npc_aim_fov_filled",
 "b_wm","b_cross","b_cross_style","b_cross_sz","b_cross_gap","b_cross_thick","b_cross_spin","b_cross_spin_spd","b_cross_pulse","b_cross_pulse_spd","b_inspect",
 "b_inv_weap","b_inv_armor","b_inv_special","b_inv_misc",
-"b_claymore","b_claymore_names","b_claymore_range",
+"b_claymore","b_claymore_range",
 "b_car","b_car_range",
-"b_radar","b_radar_sz","b_radar_range","b_radar_rot",
-"b_hitmarker","b_corpse_x",
-"b_boss","b_mod_alert","b_mod_mode","b_cheater_finder",
-"b_skin_enable","b_skin_knife","b_skin_gun","b_skin_armor",
-"b_fov_changer","b_fov_val","b_fov_ads_safe",
-"b_menu_key","b_menu_theme","b_hard_side","b_rainbow_mode"
+"b_boss","b_cheater_finder","b_cheater_panel"
 }
 
 local COLOR_IDS = {
-"b_bullet_tracers","b_esp_box","b_esp_skel","b_esp_name","b_esp_snap","b_esp_staff","b_esp_hvt",
-"b_chams_vis","b_chams_occ","b_wep_chams",
-"b_npc_box","b_npc_name","b_npc_skel",
-"b_cont","b_loot","b_corpse","b_quest","b_extract","b_hazard",
-"b_cross","b_inspect","b_claymore","b_car","b_corpse_x",
-"b_aim_fov","b_silent_fov","b_npc_aim_fov"
+"b_bullet_tracers","b_bullet_tracer_c",
+"b_esp_box","b_esp_box_c","b_esp_skel","b_esp_skel_c","b_esp_name","b_esp_name_c",
+"b_esp_hp","b_esp_hp_c","b_esp_dist","b_esp_dist_c","b_esp_weapon","b_esp_weapon_c",
+"b_esp_armor","b_esp_armor_c","b_esp_snap","b_esp_snap_c","b_esp_vis_tag","b_esp_vis_tag_c",
+"b_esp_staff","b_esp_staff_c","b_esp_hvt","b_esp_hvt_c",
+"b_chams_vis","b_chams_occ",
+"b_npc_box","b_npc_box_c","b_npc_skel","b_npc_skel_c","b_npc_name","b_npc_name_c",
+"b_npc_hp","b_npc_hp_c","b_npc_dist","b_npc_dist_c",
+"b_cont","b_cont_c","b_cont_items","b_cont_items_c",
+"b_loot","b_loot_c",
+"b_corpse","b_corpse_c","b_corpse_items","b_corpse_items_c",
+"b_quest","b_quest_c","b_extract","b_extract_c","b_hazard","b_hazard_c",
+"b_claymore","b_claymore_c","b_car","b_car_c",
+"b_cross","b_cross_c","b_hitmarker","b_hitmarker_c","b_hit_logs","b_hit_logs_c",
+"b_inspect","b_inspect_c","b_loadout_c",
+"b_aim_fov","b_aim_fov_c","b_silent_fov","b_silent_fov_c","b_npc_aim_fov","b_npc_aim_fov_c"
 }
 
 local function get_cfg_folder()
@@ -1108,18 +1214,33 @@ end
 
 local function read_config_list()
 local list = {}
+local seen = {}
 local f = io.open(get_cfg_list_path(), "r")
 if f then
     for line in f:lines() do
         local n = line:match("^%s*(.-)%s*$")
-        if n and n ~= "" then
+        if n and n ~= "" and not seen[n] then
+            seen[n] = true
             table.insert(list, n)
         end
     end
     f:close()
 end
-if #list == 0 then
-    list = {"default"}
+if not seen["default"] then
+    seen["default"] = true
+    table.insert(list, 1, "default")
+end
+local folder = get_cfg_folder()
+local common_names = {"legit", "rage", "semi_rage", "closet", "boba"}
+for _, cn in ipairs(common_names) do
+    if not seen[cn] then
+        local tf = io.open(folder .. "boba_config_" .. cn .. ".txt", "r")
+        if tf then
+            tf:close()
+            seen[cn] = true
+            table.insert(list, cn)
+        end
+    end
 end
 return list
 end
@@ -1132,6 +1253,63 @@ if f then
     end
     f:close()
 end
+end
+
+local function apply_cfg_color(id, c_arr)
+    if not id or not c_arr then return end
+    if boba_colors then
+        boba_colors[id] = c_arr
+        if id:sub(-2) == "_c" then
+            boba_colors[id:sub(1, -3)] = c_arr
+        else
+            boba_colors[id .. "_c"] = c_arr
+        end
+    end
+    pcall(function() menu.SetColor(id, c_arr) end)
+    if id:sub(-2) == "_c" then
+        pcall(function() menu.SetColor(id:sub(1, -3), c_arr) end)
+    else
+        pcall(function() menu.SetColor(id .. "_c", c_arr) end)
+    end
+
+    if id == "b_chams_vis" then cfg.chams_vc = c_arr
+    elseif id == "b_chams_occ" then cfg.chams_oc = c_arr
+    elseif id == "b_esp_box" or id == "b_esp_box_c" then cfg.esp_box_c = c_arr
+    elseif id == "b_esp_skel" or id == "b_esp_skel_c" then cfg.esp_skel_c = c_arr
+    elseif id == "b_esp_name" or id == "b_esp_name_c" then cfg.esp_name_c = c_arr
+    elseif id == "b_esp_hp" or id == "b_esp_hp_c" then cfg.esp_hp_c = c_arr
+    elseif id == "b_esp_dist" or id == "b_esp_dist_c" then cfg.esp_dist_c = c_arr
+    elseif id == "b_esp_weapon" or id == "b_esp_weapon_c" then cfg.esp_weapon_c = c_arr
+    elseif id == "b_esp_armor" or id == "b_esp_armor_c" then cfg.esp_armor_c = c_arr
+    elseif id == "b_esp_snap" or id == "b_esp_snap_c" then cfg.esp_snap_c = c_arr
+    elseif id == "b_esp_vis_tag" or id == "b_esp_vis_tag_c" then cfg.esp_vis_tag_c = c_arr
+    elseif id == "b_esp_staff" or id == "b_esp_staff_c" then cfg.esp_staff_c = c_arr
+    elseif id == "b_esp_hvt" or id == "b_esp_hvt_c" then cfg.esp_hvt_c = c_arr
+    elseif id == "b_npc_box" or id == "b_npc_box_c" then cfg.npc_box_c = c_arr
+    elseif id == "b_npc_name" or id == "b_npc_name_c" then cfg.npc_name_c = c_arr
+    elseif id == "b_npc_skel" or id == "b_npc_skel_c" then cfg.npc_skel_c = c_arr
+    elseif id == "b_npc_hp" or id == "b_npc_hp_c" then cfg.npc_hp_c = c_arr
+    elseif id == "b_npc_dist" or id == "b_npc_dist_c" then cfg.npc_dist_c = c_arr
+    elseif id == "b_cont" or id == "b_cont_c" then cfg.cont_c = c_arr
+    elseif id == "b_cont_items" or id == "b_cont_items_c" then cfg.cont_items_c = c_arr
+    elseif id == "b_loot" or id == "b_loot_c" then cfg.loot_c = c_arr
+    elseif id == "b_corpse" or id == "b_corpse_c" then cfg.corpse_c = c_arr
+    elseif id == "b_corpse_items" or id == "b_corpse_items_c" then cfg.corpse_items_c = c_arr
+    elseif id == "b_quest" or id == "b_quest_c" then cfg.quest_c = c_arr
+    elseif id == "b_extract" or id == "b_extract_c" then cfg.extract_c = c_arr
+    elseif id == "b_hazard" or id == "b_hazard_c" then cfg.hazard_c = c_arr
+    elseif id == "b_cross" or id == "b_cross_c" then cfg.cross_c = c_arr
+    elseif id == "b_hitmarker" or id == "b_hitmarker_c" then cfg.hitmarker_c = c_arr
+    elseif id == "b_hit_logs" or id == "b_hit_logs_c" then cfg.hit_logs_c = c_arr
+    elseif id == "b_inspect" or id == "b_inspect_c" then cfg.insp_c = c_arr
+    elseif id == "b_loadout_c" then cfg.loadout_c = c_arr
+    elseif id == "b_claymore" or id == "b_claymore_c" then cfg.claymore_c = c_arr
+    elseif id == "b_car" or id == "b_car_c" then cfg.car_c = c_arr
+    elseif id == "b_bullet_tracers" or id == "b_bullet_tracer_c" then cfg.bullet_tracer_c = c_arr
+    elseif id == "b_aim_fov" or id == "b_aim_fov_c" then cfg.aim_fov_c = c_arr
+    elseif id == "b_silent_fov" or id == "b_silent_fov_c" then cfg.sil_fov_c = c_arr
+    elseif id == "b_npc_aim_fov" or id == "b_npc_aim_fov_c" then cfg.na_fov_c = c_arr
+    end
 end
 
 save_config = function(name)
@@ -1158,9 +1336,10 @@ for _, id in ipairs(CFG_IDS) do
     end
 end
 for _, id in ipairs(COLOR_IDS) do
-    local c = mc(id)
-    if c then
-        f:write(id .. "_c=" .. format("%.4f,%.4f,%.4f,%.4f",
+    local c = (boba_colors and boba_colors[id]) or mc(id)
+    if c and type(c) == "table" and #c >= 3 then
+        local key = id:find("_c$") and id or (id .. "_c")
+        f:write(key .. "=" .. format("%.4f,%.4f,%.4f,%.4f",
             c[1] or 1, c[2] or 1, c[3] or 1, c[4] or 1) .. string.char(10))
     end
 end
@@ -1183,9 +1362,10 @@ if name == "default" then
             end
         end
         for _, id in ipairs(COLOR_IDS) do
-            local c = mc(id)
-            if c then
-                alt_f:write(id .. "_c=" .. format("%.4f,%.4f,%.4f,%.4f",
+            local c = (boba_colors and boba_colors[id]) or mc(id)
+            if c and type(c) == "table" and #c >= 3 then
+                local key = id:find("_c$") and id or (id .. "_c")
+                alt_f:write(key .. "=" .. format("%.4f,%.4f,%.4f,%.4f",
                     c[1] or 1, c[2] or 1, c[3] or 1, c[4] or 1) .. string.char(10))
             end
         end
@@ -1194,6 +1374,16 @@ if name == "default" then
         alt_f:flush()
         alt_f:close()
     end
+end
+
+local list = read_config_list()
+local found = false
+for _, v in ipairs(list) do
+    if v == name then found = true; break end
+end
+if not found then
+    table.insert(list, name)
+    write_config_list(list)
 end
 
 write_active_cfg(name)
@@ -1226,46 +1416,35 @@ for _, id in ipairs(CFG_IDS) do
     if data[id] then
         local v = data[id]
         local actual_val
-        if id == "b_fov_changer" then
-            actual_val = true
-        elseif v == "0" or v == "1" then
-            actual_val = (v == "1")
+        if boba_store and type(boba_store[id]) == "number" then
+            actual_val = tonumber(v)
+        elseif boba_store and type(boba_store[id]) == "boolean" then
+            actual_val = (v == "1" or v == "true")
         else
             local n = tonumber(v)
-            if n then actual_val = n end
+            if n ~= nil and (v ~= "0" and v ~= "1") then
+                actual_val = n
+            elseif v == "0" or v == "1" then
+                actual_val = (v == "1")
+            else
+                actual_val = v
+            end
         end
         if actual_val ~= nil then
             set_val(id, actual_val)
         end
     end
 end
-set_val("b_fov_changer", true)
 for _, id in ipairs(COLOR_IDS) do
-    local cv = data[id .. "_c"]
-    if cv then
+    local cv = data[id .. "_c"] or data[id]
+    if cv and type(cv) == "string" and cv:find(",") then
         local r,g,b,a = cv:match("([%d%.%-]+),([%d%.%-]+),([%d%.%-]+),([%d%.%-]+)")
         if r and g and b then
             local nr = tonumber(r) or 1
             local ng = tonumber(g) or 1
             local nb = tonumber(b) or 1
             local na = tonumber(a) or 1
-            if nr < 0.12 and ng < 0.12 and nb < 0.12 then
-                nr, ng, nb = 0.85, 0.85, 0.85
-            end
-            if na < 0.5 then na = 1.0 end
-            local c_arr = {nr, ng, nb, na}
-            pcall(function()
-                menu.SetColor(id, c_arr)
-            end)
-            if id == "b_chams_vis" then cfg.chams_vc = c_arr
-            elseif id == "b_chams_occ" then cfg.chams_oc = c_arr
-            elseif id == "b_esp_box" then cfg.esp_box_c = c_arr
-            elseif id == "b_esp_name" then cfg.esp_name_c = c_arr
-            elseif id == "b_esp_skel" then cfg.esp_skel_c = c_arr
-            elseif id == "b_esp_snap" then cfg.esp_snap_c = c_arr
-            elseif id == "b_npc_box" then cfg.npc_box_c = c_arr
-            elseif id == "b_npc_name" then cfg.npc_name_c = c_arr
-            end
+            apply_cfg_color(id, {nr, ng, nb, na})
         end
     end
 end
@@ -1368,21 +1547,36 @@ SupplyDropMilitary = true, SupplyDropMilitary_Default = true, SupplyDropMilitary
 
 local function scan_containers()
 local result = {}
+if not cfg.cont then world.containers = result; return end
 local ws = game.Workspace
 if not ws then world.containers = result; return end
 
 local seen = {}
 local function check_container(m)
     if not m or seen[m] then return end
-    if m.ClassName == "Model" and not m:FindFirstChildOfClass("Humanoid") and (CONTAINER_NAMES[m.Name] or m:FindFirstChild("Inventory")) then
+    if (m.ClassName == "Model" or m.ClassName == "Folder") and not m:FindFirstChildOfClass("Humanoid") and (CONTAINER_NAMES[m.Name] or m:FindFirstChild("Inventory") or m:FindFirstChild("Properties")) then
         local part = get_root(m)
         if part then
             seen[m] = true
+            local cnt = nil
+            local op_c = nil
+            if cfg.cont_items then
+                cnt = get_inventory(m)
+                if cnt then
+                    for k = 1, #cnt do
+                        if is_op_loot(cnt[k]) then
+                            if not op_c then op_c = {} end
+                            op_c[#op_c + 1] = cnt[k]
+                        end
+                    end
+                end
+            end
             result[#result+1] = {
                 name = m.Name,
                 part = part,
                 model = m,
-                contents = get_inventory(m)
+                contents = cnt,
+                op_contents = op_c
             }
         end
     end
@@ -1411,28 +1605,32 @@ if nocoll then
     end
 end
 
-local wch = ws:GetChildren()
-for i = 1, #wch do
-    local m = wch[i]
-    if m and m.ClassName == "Model" then
-        if CONTAINER_NAMES[m.Name] or m:FindFirstChild("Inventory") then
-            check_container(m)
-        else
-            local sub_c = m:GetChildren()
-            for k = 1, #sub_c do
-                local sm = sub_c[k]
-                if sm and sm.ClassName == "Model" and (CONTAINER_NAMES[sm.Name] or sm:FindFirstChild("Inventory")) then
-                    check_container(sm)
-                end
-            end
-        end
+local specific_folders = { "Containers", "LootContainers", "Debris", "Spawners" }
+for _, sfn in ipairs(specific_folders) do
+    local f = ws:FindFirstChild(sfn)
+    if f then
+        local fch = f:GetChildren()
+        for i = 1, #fch do check_container(fch[i]) end
     end
 end
+
+local wch = ws:GetChildren()
+for i = 1, #wch do
+    local c = wch[i]
+    if c and (CONTAINER_NAMES[c.Name] or (c.ClassName == "Model" and c:FindFirstChild("Inventory"))) then
+        check_container(c)
+    end
+end
+
 world.containers = result
 end
 
 local function scan_npcs()
     local result = {}
+    if not cfg.npc and not cfg.npc_box and not cfg.npc_name and not cfg.npc_hp and not cfg.npc_dist and not cfg.npc_snap then
+        world.npcs = result
+        return
+    end
     local ws = game.Workspace
     if not ws then world.npcs = result; return end
 
@@ -1457,15 +1655,7 @@ local function scan_npcs()
         if not npc then return true end
         if p_chars[npc] then return true end
         if pnames[npc.Name] then return true end
-        local rbx_plr = false
-        pcall(function()
-            if game.Players and game.Players.GetPlayerFromCharacter then
-                if game.Players:GetPlayerFromCharacter(npc) then
-                    rbx_plr = true
-                end
-            end
-        end)
-        return rbx_plr
+        return false
     end
 
     local function process(npc)
@@ -1507,7 +1697,7 @@ local function scan_npcs()
         end
     end
 
-    local zones = { "AiZones", "AIZones", "NPCs", "AI", "Enemies", "SpawnerZones", "SafeZone", "Safezone", "Traders", "Trader", "Characters", "Living" }
+    local zones = { "AiZones", "AIZones", "NPCs", "AI", "Enemies", "SafeZone", "Safezone", "Traders", "Trader", "Characters", "Living" }
     for zi = 1, #zones do
         local z = ws:FindFirstChild(zones[zi])
         if z then walk(z) end
@@ -1522,7 +1712,11 @@ local function scan_npcs()
     world.npcs = result
 end
 
+local corpse_inv_cache = setmetatable({}, { __mode = "k" })
 local function scan_world_items()
+if not cfg.loot and not cfg.corpse then
+    world.items = {}; world.corpses = {}; return
+end
 local ws = game.Workspace
 if not ws then
 world.items = {}; world.corpses = {}; return
@@ -1535,17 +1729,37 @@ world.items = {}; world.corpses = {}; return
 end
 local items_r, corpses_r = {}, {}
 local function proc(m)
-if m.ClassName ~= "Model" or m.Name == "" then return end
+if not m or m.ClassName ~= "Model" or m.Name == "" then return end
 local part = get_root(m)
-if not part then return end
+if not part or not utility.IsValid(part) then return end
 local hum = m:FindFirstChildOfClass("Humanoid")
 if hum and hum.Health and hum.Health <= 0 then
+    local cached = corpse_inv_cache[m]
+    local cnt, good_cnt
+    if cached then
+        cnt = cached.cnt
+        good_cnt = cached.good_cnt
+    else
+        if cfg.corpse_i then
+            cnt = get_inventory(m)
+            if cnt then
+                for k = 1, #cnt do
+                    if is_good_item(cnt[k]) then
+                        if not good_cnt then good_cnt = {} end
+                        good_cnt[#good_cnt + 1] = cnt[k]
+                    end
+                end
+            end
+        end
+        corpse_inv_cache[m] = { cnt = cnt, good_cnt = good_cnt }
+    end
     corpses_r[#corpses_r+1] = {
         name = m.Name, part = part,
-        contents = get_inventory(m)
+        contents = cnt,
+        good_contents = good_cnt
     }
 else
-    items_r[#items_r+1] = { name = m.Name, part = part }
+    items_r[#items_r+1] = { name = m.Name, part = part, cat = get_item_category(m.Name) }
 end
 end
 local ch = drops:GetChildren()
@@ -1560,6 +1774,7 @@ world.corpses = corpses_r
 end
 
 local function scan_quests()
+if not cfg.quest then world.quests = {}; return end
 local ws = game.Workspace
 if not ws then world.quests = {}; return end
 local src = ws:FindFirstChild("QuestItems")
@@ -1676,11 +1891,7 @@ if p and p.IsValid and p.IsAlive then
             local ws_f = (jn and (jn:FindFirstChild("WipeStatistics") or jn:FindFirstChild("Statistics")))
                 or (st and (st:FindFirstChild("WipeStatistics") or st:FindFirstChild("Statistics")))
                 or data:FindFirstChild("WipeStatistics") or data:FindFirstChild("Statistics")
-            if not ws_f then
-                pcall(function()
-                    ws_f = data:FindFirstChild("WipeStatistics", true) or data:FindFirstChild("Statistics", true)
-                end)
-            end
+
             if ws_f then
                 local pvp_kdr = ws_f:FindFirstChild("PVPKDR") or ws_f:FindFirstChild("KDR") or ws_f:FindFirstChild("KD")
                 if pvp_kdr and pvp_kdr.Value and tonumber(pvp_kdr.Value) then
@@ -1801,30 +2012,41 @@ if p and p.IsValid and p.IsAlive then
 end
 end
 local heads = {}
+local p_map = {}
 for i = 1, #result do
 local r = result[i]
 if r.head then heads[r.name] = r.head end
+if r.name then p_map[r.name] = r end
 end
 cached_heads = heads
 world.players = result
+world.player_map = p_map
 end
 
 local function scan_extracts()
 local result = {}
+if not cfg.extract then world.extracts = result; return end
 local ws = game.Workspace
 if not ws then world.extracts = result; return end
 
 local seen = {}
+local function find_extract_part(o)
+    if not o then return nil end
+    if o:IsA("BasePart") then return o end
+    if o:IsA("Model") and o.PrimaryPart then return o.PrimaryPart end
+    local p = o:FindFirstChild("Zone") or o:FindFirstChild("Trigger") or o:FindFirstChild("Part") or o:FindFirstChild("Hitbox") or o:FindFirstChildOfClass("BasePart")
+    if p and p:IsA("BasePart") then return p end
+    local ch = o:GetChildren()
+    for j = 1, #ch do
+        if ch[j]:IsA("BasePart") then return ch[j] end
+        if ch[j]:IsA("Model") and ch[j].PrimaryPart then return ch[j].PrimaryPart end
+    end
+    return nil
+end
+
 local function try_add(obj, custom_name)
     if not obj or seen[obj] then return end
-    local part = nil
-    if obj:IsA("BasePart") then
-        part = obj
-    elseif obj:IsA("Model") then
-        part = obj.PrimaryPart or obj:FindFirstChild("Zone") or obj:FindFirstChild("Trigger") or obj:FindFirstChild("Part") or obj:FindFirstChildOfClass("BasePart")
-    elseif obj:IsA("Folder") or obj:IsA("Configuration") then
-        part = obj:FindFirstChildOfClass("BasePart") or (obj:FindFirstChild("Part") and obj.Part:IsA("BasePart") and obj.Part)
-    end
+    local part = find_extract_part(obj)
     if part and part.Position then
         seen[obj] = true
         seen[part] = true
@@ -1901,24 +2123,6 @@ if map then
             end
         end
     end
-    local mch = map:GetChildren()
-    for i = 1, #mch do
-        if name_is_extract(mch[i].Name) then
-            try_add(mch[i])
-            if mch[i]:IsA("Model") or mch[i]:IsA("Folder") then
-                local sub = mch[i]:GetChildren()
-                for k = 1, #sub do try_add(sub[k], mch[i].Name) end
-            end
-        end
-    end
-end
-
--- 4. Check top-level Workspace children
-local wch = ws:GetChildren()
-for i = 1, #wch do
-    if name_is_extract(wch[i].Name) then
-        try_add(wch[i])
-    end
 end
 
 world.extracts = result
@@ -1926,6 +2130,7 @@ end
 
 local function scan_hazards()
 local result = {}
+if not cfg.hazard then world.hazards = result; return end
 local ws = game.Workspace
 if not ws then world.hazards = result; return end
 local nocoll = ws:FindFirstChild("NoCollision")
@@ -1958,271 +2163,276 @@ end
 local cfg_last_update = 0
 local function cache_cfg()
 local now = utility.GetTickCount()
-if (now - cfg_last_update) < 200 then return end
+local is_menu_open = is_any_menu_open()
+local interval = is_menu_open and 250 or 1500
+if (now - cfg_last_update) < interval then return end
 cfg_last_update = now
 
 cfg.esp       = mg("b_esp")
 cfg.esp_style = mg("b_esp_style")
 cfg.esp_box   = mg("b_esp_box")
-cfg.esp_box_c = mc("b_esp_box")
+cfg.esp_box_c = mc("b_esp_box_c", mc("b_esp_box", {1, 0.3, 0.3, 1}))
 cfg.esp_skel  = mg("b_esp_skel")
-cfg.esp_skel_c= mc("b_esp_skel")
+cfg.esp_skel_c= mc("b_esp_skel_c", mc("b_esp_skel", {1, 1, 1, 1}))
 cfg.esp_hp    = mg("b_esp_hp")
 cfg.esp_hp_t  = mg("b_esp_hp_txt")
+cfg.esp_hp_c  = mc("b_esp_hp_c", mc("b_esp_hp", {0.2, 1, 0.2, 1}))
 cfg.esp_name  = mg("b_esp_name")
-cfg.esp_name_c= mc("b_esp_name")
+cfg.esp_name_c= mc("b_esp_name_c", mc("b_esp_name", {1, 1, 1, 1}))
 cfg.esp_dist  = mg("b_esp_dist")
+cfg.esp_dist_c= mc("b_esp_dist_c", mc("b_esp_dist", {0.7, 0.7, 0.7, 1}))
 cfg.esp_wep   = mg("b_esp_weapon")
+cfg.esp_weapon_c = mc("b_esp_weapon_c", mc("b_esp_weapon", {1, 0.7, 0.3, 1}))
 cfg.esp_snap  = mg("b_esp_snap")
-cfg.esp_snap_c= mc("b_esp_snap")
-cfg.esp_range = mg("b_esp_range")
+cfg.esp_snap_c= mc("b_esp_snap_c", mc("b_esp_snap", {0.4, 0.7, 1.0, 1.0}))
+cfg.esp_range = (type(mg("b_esp_range", 1000)) == "number" and mg("b_esp_range", 1000)) or 1000
 cfg.esp_team  = mg("b_esp_team")
 cfg.esp_armor = mg("b_esp_armor")
+cfg.esp_armor_c = mc("b_esp_armor_c", mc("b_esp_armor", {0.6, 0.85, 1, 1}))
 cfg.esp_hvt   = mg("b_esp_hvt")
-cfg.esp_hvt_c = mc("b_esp_hvt")
+cfg.esp_hvt_c = mc("b_esp_hvt_c", mc("b_esp_hvt", {1, 0.85, 0.2, 1}))
 cfg.esp_vis_tag = mg("b_esp_vis_tag")
-cfg.loadout_esp = mg("b_loadout_esp")
-cfg.loadout_sz  = mg("b_loadout_sz") or 38
-cfg.loadout_x   = mg("b_loadout_x") or 420
-cfg.loadout_y   = mg("b_loadout_y") or 120
-
-cfg.chams     = mg("b_chams")
-cfg.chams_m   = mg("b_chams_mode") or 0
-cfg.chams_vc  = mc("b_chams_vis")
-cfg.chams_oc  = mc("b_chams_occ")
-cfg.chams_vis = mg("b_chams_vc")
-cfg.wep_chams = mg("b_wep_chams")
-cfg.wep_chams_c = mc("b_wep_chams")
-cfg.wep_chams_style = mg("b_wep_chams_style") or 0
-cfg.wep_chams_pulse = mg("b_wep_chams_pulse")
-
-cfg.npc       = mg("b_npc")
-cfg.npc_box   = mg("b_npc_box")
-cfg.npc_box_c = mc("b_npc_box")
-cfg.npc_hp    = mg("b_npc_hp")
-cfg.npc_name  = mg("b_npc_name")
-cfg.npc_name_c= mc("b_npc_name")
-cfg.npc_dist  = mg("b_npc_dist")
-cfg.npc_skel  = mg("b_npc_skel")
-cfg.npc_skel_c= mc("b_npc_skel")
-cfg.npc_range = mg("b_npc_range")
-
-cfg.cont      = get_val("b_cont", false)
-cfg.cont_c    = mc("b_cont", {0.2, 0.8, 1, 1})
-cfg.cont_items= get_val("b_cont_items", false)
-cfg.cont_filter = get_val("b_cont_filter", 0) or 0
-cfg.cont_range= get_val("b_cont_range", 500) or 500
-cfg.loot      = get_val("b_loot", false)
-cfg.loot_c    = mc("b_loot", {0.4, 1, 0.4, 1})
-cfg.loot_range= get_val("b_loot_range", 400) or 400
-cfg.corpse    = get_val("b_corpse", false)
-cfg.corpse_c  = mc("b_corpse", {1, 0.3, 0.3, 1})
-cfg.corpse_i  = get_val("b_corpse_items", false)
-cfg.corpse_r  = get_val("b_corpse_range", 500) or 500
-cfg.quest     = get_val("b_quest", false)
-cfg.quest_c   = mc("b_quest", {1, 0.85, 0.2, 1})
-cfg.quest_r   = get_val("b_quest_range", 800) or 800
-
-cfg.aim       = get_val("b_aim", false)
-cfg.aim_key   = get_val("b_aim_key", 0x02)
-cfg.npc_aim_key = get_val("b_npc_aim_key", 0x02)
-cfg.aim_fov   = get_val("b_aim_fov", 150)
-cfg.aim_sm    = get_val("b_aim_smooth", 5.0)
-cfg.aim_bone  = get_val("b_aim_bone", 0)
-cfg.aim_vis_txt = mg("b_aim_vis_text")
-cfg.aim_pred  = mg("b_aim_pred")
-cfg.aim_pred_scale = 1.0
-cfg.aim_lead  = mg("b_aim_lead")
-cfg.aim_lock  = mg("b_aim_lock")
-cfg.aim_vis   = mg("b_aim_vis")
-cfg.aim_team  = mg("b_aim_team")
-cfg.aim_draw  = mg("b_aim_fov_draw")
-cfg.aim_fov_filled = mg("b_aim_fov_filled")
-cfg.aim_fov_c = mc("b_aim_fov")
-
-cfg.silent    = get_val("b_silent", false)
-cfg.sil_bone  = get_val("b_silent_bone", 0)
-cfg.sil_vis_txt = false
-cfg.sil_multi = get_val("b_silent_multipoint", true)
-cfg.sil_fov   = get_val("b_silent_fov", 200)
-cfg.sil_vis   = mg("b_silent_vis")
-cfg.no_recoil = get_val("b_no_recoil", false)
-cfg.recoil_reduc = get_val("b_recoil_reduc", 70)
-cfg.sil_team  = mg("b_silent_team")
-cfg.sil_draw  = mg("b_silent_fov_draw")
-cfg.sil_fov_filled = mg("b_silent_fov_filled")
-cfg.sil_fov_c = mc("b_silent_fov")
-
-cfg.npc_aim   = mg("b_npc_aim")
-cfg.na_fov    = mg("b_npc_aim_fov")
-cfg.na_sm     = mg("b_npc_aim_smooth")
-cfg.na_bone   = mg("b_npc_aim_bone")
-cfg.na_pred   = mg("b_npc_aim_pred")
-cfg.na_draw   = mg("b_npc_aim_fov_draw")
-cfg.na_fov_filled = mg("b_npc_aim_fov_filled")
-cfg.na_fov_c = mc("b_npc_aim_fov")
-
-cfg.wm        = mg("b_wm")
-cfg.cross     = mg("b_cross")
-cfg.cross_c   = mc("b_cross")
-cfg.cross_style = mg("b_cross_style") or 0
-cfg.cross_sz  = mg("b_cross_sz") or 8
-cfg.cross_gap = mg("b_cross_gap") or 3
-cfg.cross_thick = mg("b_cross_thick") or 2
-cfg.cross_spin = mg("b_cross_spin")
-cfg.cross_spin_spd = mg("b_cross_spin_spd") or 5
-cfg.cross_pulse = mg("b_cross_pulse")
-cfg.cross_pulse_spd = mg("b_cross_pulse_spd") or 4
-cfg.inspect   = mg("b_inspect")
-cfg.insp_c    = mc("b_inspect")
-
+cfg.esp_vis_tag_c = mc("b_esp_vis_tag_c", mc("b_esp_vis_tag", {0.15, 1, 0.25, 1}))
 cfg.esp_staff = mg("b_esp_staff")
-cfg.esp_staff_c = mc("b_esp_staff")
+cfg.esp_staff_c = mc("b_esp_staff_c", mc("b_esp_staff", {1, 0.2, 1, 1}))
+cfg.loadout_esp = mg("b_loadout_esp")
+cfg.loadout_c   = mc("b_loadout_c", mc("b_loadout_esp", {0.4, 0.8, 1, 1}))
+cfg.loadout_sz  = mg("b_loadout_sz", 38)
+cfg.loadout_x   = mg("b_loadout_x", 420)
+cfg.loadout_y   = mg("b_loadout_y", 120)
+cfg.inv_weap    = mg("b_inv_weap", false)
+cfg.inv_armor   = mg("b_inv_armor", false)
+cfg.inv_special = mg("b_inv_special", false)
+cfg.inv_misc    = mg("b_inv_misc", false)
+cfg.inspect     = mg("b_inspect")
+cfg.insp_c      = mc("b_inspect_c", mc("b_inspect", {0.4, 0.8, 1, 1}))
 
-cfg.extract   = mg("b_extract")
-cfg.extract_c = mc("b_extract")
-cfg.extract_r = mg("b_extract_range")
-cfg.hazard    = mg("b_hazard")
-cfg.hazard_c  = mc("b_hazard")
-cfg.hazard_r  = mg("b_hazard_range")
+cfg.chams       = mg("b_chams")
+cfg.chams_m     = mg("b_chams_mode", 0)
+cfg.chams_vis   = mg("b_chams_vc")
+cfg.chams_vc    = mc("b_chams_vis", {0.0, 1.0, 0.3, 0.8})
+cfg.chams_oc    = mc("b_chams_occ", {1.0, 0.25, 0.25, 0.8})
 
-cfg.loot_f    = mg("b_loot_filter")
-
-cfg.nograss   = mg("b_nograss")
-cfg.remove_foliage = mg("b_remove_foliage")
-cfg.bullet_tracers = mg("b_bullet_tracers")
-cfg.tracer_c        = mc("b_bullet_tracers") or {0.25, 0.65, 1.0, 1.0}
-cfg.tracer_dur      = mg("b_tracer_duration") or 1.0
-cfg.hit_logs       = mg("b_hit_logs")
-cfg.hit_log_dur    = mg("b_hit_log_duration") or 4.0
-
-cfg.claymore  = mg("b_claymore")
-cfg.clay_c    = mc("b_claymore")
-cfg.clay_names= mg("b_claymore_names")
-cfg.clay_r    = mg("b_claymore_range")
-
-cfg.car       = mg("b_car")
-cfg.car_c     = mc("b_car")
-cfg.car_r     = mg("b_car_range")
-
-cfg.radar     = mg("b_radar")
-cfg.radar_sz  = mg("b_radar_sz")
-cfg.radar_range = mg("b_radar_range")
-cfg.radar_rot = mg("b_radar_rot")
-
-cfg.hitmarker = mg("b_hitmarker")
-cfg.corpse_x  = mg("b_corpse_x")
-cfg.corpse_xc = mc("b_corpse_x")
-
-cfg.boss      = mg("b_boss")
-cfg.mod_alert = mg("b_mod_alert")
-cfg.mod_mode  = mg("b_mod_mode")
+cfg.npc         = mg("b_npc")
+cfg.npc_box     = mg("b_npc_box")
+cfg.npc_box_c   = mc("b_npc_box_c", mc("b_npc_box", {1, 0.5, 0.2, 1}))
+cfg.npc_hp      = mg("b_npc_hp")
+cfg.npc_hp_c    = mc("b_npc_hp_c", mc("b_npc_hp", {0.2, 1, 0.2, 1}))
+cfg.npc_name    = mg("b_npc_name")
+cfg.npc_name_c  = mc("b_npc_name_c", mc("b_npc_name", {1, 0.8, 0.4, 1}))
+cfg.npc_dist    = mg("b_npc_dist")
+cfg.npc_dist_c  = mc("b_npc_dist_c", mc("b_npc_dist", {0.7, 0.7, 0.7, 1}))
+cfg.npc_skel    = mg("b_npc_skel")
+cfg.npc_skel_c  = mc("b_npc_skel_c", mc("b_npc_skel", {1, 0.6, 0.3, 0.8}))
+cfg.npc_range   = (type(mg("b_npc_range", 500)) == "number" and mg("b_npc_range", 500)) or 500
+cfg.boss        = mg("b_boss")
 cfg.cheater_finder = mg("b_cheater_finder")
+cfg.cheater_panel  = mg("b_cheater_panel")
 
-cfg.skin_enable = mg("b_skin_enable")
-cfg.skin_knife = mg("b_skin_knife") or 0
-cfg.skin_gun  = mg("b_skin_gun") or 0
-cfg.skin_armor = mg("b_skin_armor") or 0
-cfg.fov_changer = mg("b_fov_changer")
-cfg.fov_val     = mg("b_fov_val") or 90
-cfg.fov_ads_safe= mg("b_fov_ads_safe")
+local old_cont = cfg.cont
+cfg.cont        = mg("b_cont", false)
+cfg.cont_c      = mc("b_cont_c", mc("b_cont", {0.2, 0.8, 1, 1}))
+cfg.cont_items  = mg("b_cont_items", false)
+cfg.cont_items_c = mc("b_cont_items_c", mc("b_cont_items", {0.85, 0.85, 0.85, 1}))
+cfg.cont_filter = mg("b_cont_filter", 0)
+cfg.cont_range  = (type(mg("b_cont_range", 500)) == "number" and mg("b_cont_range", 500)) or 500
+if cfg.cont and (not old_cont or #world.containers == 0) then
+    pcall(scan_containers)
+end
 
-cfg.inv_weap  = mg("b_inv_weap")
-cfg.inv_armor = mg("b_inv_armor")
-cfg.inv_special = mg("b_inv_special")
-cfg.inv_misc  = mg("b_inv_misc")
+local old_loot = cfg.loot
+cfg.loot        = mg("b_loot", false)
+cfg.loot_c      = mc("b_loot_c", mc("b_loot", {0.4, 1, 0.4, 1}))
+cfg.loot_range  = (type(mg("b_loot_range", 400)) == "number" and mg("b_loot_range", 400)) or 400
+cfg.corpse      = mg("b_corpse", false)
+cfg.corpse_c    = mc("b_corpse_c", mc("b_corpse", {0.8, 0.2, 0.2, 1}))
+cfg.corpse_i    = mg("b_corpse_items", false)
+cfg.corpse_items_c = mc("b_corpse_items_c", mc("b_corpse_items", {0.85, 0.85, 0.85, 1}))
+cfg.corpse_r    = (type(mg("b_corpse_r", mg("b_corpse_range", 500))) == "number" and mg("b_corpse_r", mg("b_corpse_range", 500))) or 500
+if (cfg.loot or cfg.corpse) and (not old_loot or #world.items == 0) then
+    pcall(scan_world_items)
+end
 
+cfg.quest       = mg("b_quest", false)
+cfg.quest_c     = mc("b_quest_c", mc("b_quest", {1, 0.85, 0.2, 1}))
+cfg.quest_r     = (type(mg("b_quest_range", 800)) == "number" and mg("b_quest_range", 800)) or 800
+cfg.hazard      = mg("b_hazard", false)
+cfg.hazard_c    = mc("b_hazard_c", mc("b_hazard", {1, 0.3, 0.1, 1}))
+cfg.hazard_r    = (type(mg("b_hazard_range", 1500)) == "number" and mg("b_hazard_range", 1500)) or 1500
+
+local old_extract = cfg.extract
+cfg.extract     = mg("b_extract", false)
+cfg.extract_c   = mc("b_extract_c", mc("b_extract", {0.2, 1, 0.5, 1}))
+cfg.extract_r   = (type(mg("b_extract_range", 3000)) == "number" and mg("b_extract_range", 3000)) or 3000
+if cfg.extract and (not old_extract or #world.extracts == 0) then
+    pcall(scan_extracts)
+end
+
+cfg.claymore    = mg("b_claymore", false)
+cfg.claymore_c  = mc("b_claymore_c", mc("b_claymore", {1, 0.2, 0.2, 1}))
+cfg.car         = mg("b_car", false)
+cfg.car_c       = mc("b_car_c", mc("b_car", {0.2, 0.6, 1, 1}))
+
+cfg.aim         = mg("b_aim", false)
+cfg.aim_key     = mg("b_aim_key", 0x02)
+cfg.aim_fov     = mg("b_aim_fov", 150)
+cfg.aim_sm      = mg("b_aim_smooth", 5.0)
+cfg.aim_bone    = mg("b_aim_bone", 0)
+cfg.aim_vis_txt = mg("b_aim_vis_text")
+cfg.aim_pred    = mg("b_aim_pred")
+cfg.aim_pred_scale = 1.0
+cfg.aim_lead    = mg("b_aim_lead")
+cfg.aim_lock    = mg("b_aim_lock")
+cfg.aim_vis     = mg("b_aim_vis")
+cfg.aim_team    = mg("b_aim_team")
+cfg.aim_draw    = mg("b_aim_fov_draw") or mg("b_aim_draw_fov")
+cfg.aim_fov_filled = mg("b_aim_fov_filled")
+cfg.aim_fov_c   = mc("b_aim_fov_c", mc("b_aim_fov", {1, 1, 1, 0.25}))
+
+cfg.sil         = mg("b_silent")
+cfg.sil_key     = mg("b_silent_key", 0)
+cfg.sil_mode    = mg("b_silent_mode", 0)
+cfg.sil_hchance = mg("b_silent_hchance", 100)
+cfg.sil_fov     = mg("b_silent_fov", 60)
+cfg.sil_fov_c   = mc("b_silent_fov_c", mc("b_silent_fov", {1, 0.8, 0.2, 0.2}))
+cfg.sil_draw    = mg("b_silent_fov_draw") or mg("b_silent_draw_fov")
+cfg.sil_fov_filled = mg("b_silent_fov_filled")
+cfg.sil_bone    = mg("b_silent_bone", 0)
+cfg.sil_multipoint = mg("b_silent_multipoint")
+cfg.sil_vis     = mg("b_silent_vis")
+cfg.sil_team    = mg("b_silent_team")
+
+cfg.na          = mg("b_npc_aim")
+cfg.na_key      = mg("b_npc_aim_key", 0x02)
+cfg.na_fov      = mg("b_npc_aim_fov", 90)
+cfg.na_pred     = mg("b_npc_aim_pred")
+cfg.na_draw     = mg("b_npc_aim_fov_draw")
+cfg.na_fov_filled = mg("b_npc_aim_fov_filled")
+cfg.na_fov_c    = mc("b_npc_aim_fov_c", mc("b_npc_aim_fov", {1, 0.6, 0.2, 0.3}))
+
+cfg.no_recoil   = mg("b_no_recoil")
+cfg.recoil_reduc= mg("b_recoil_reduc", 70)
+cfg.hitmarker   = mg("b_hitmarker")
+cfg.hitmarker_c = mc("b_hitmarker_c", mc("b_hitmarker", {1, 1, 1, 1}))
+cfg.hit_logs    = mg("b_hit_logs", false)
+cfg.hit_logs_c  = mc("b_hit_logs_c", mc("b_hit_logs", {0.25, 0.65, 1.0, 1.0}))
+cfg.hit_log_dur = mg("b_hit_log_duration", 4.0)
+cfg.bullet_tracers = mg("b_bullet_tracers")
+cfg.bullet_tracer_c = mc("b_bullet_tracer_c", mc("b_bullet_tracers", {1, 0.8, 0, 0.8}))
+cfg.cross       = mg("b_cross") or mg("b_crosshair")
+cfg.cross_style = mg("b_cross_style", 0)
+cfg.cross_sz    = mg("b_cross_sz", 8)
+cfg.cross_gap   = mg("b_cross_gap", 3)
+cfg.cross_thick = mg("b_cross_thick", 2)
+cfg.cross_spin  = mg("b_cross_spin")
+cfg.cross_spin_spd = mg("b_cross_spin_spd", 5)
+cfg.cross_pulse = mg("b_cross_pulse")
+cfg.cross_pulse_spd = mg("b_cross_pulse_spd", 4)
+cfg.cross_c     = mc("b_cross_c", mc("b_cross", {0, 1, 0, 1}))
 end
 
 
-player_bounds_cache = {}
-
 local function draw_esp_box(x, y, w, h, col)
-    local c = col or {1, 1, 1, 1}
-    local ix, iy, iw, ih = math.floor(x), math.floor(y), math.floor(w), math.floor(h)
-    draw.Line(ix - 1, iy - 1, ix + iw + 1, iy - 1, {0, 0, 0, 0.95}, 1)
-    draw.Line(ix - 1, iy + ih + 1, ix + iw + 1, iy + ih + 1, {0, 0, 0, 0.95}, 1)
-    draw.Line(ix - 1, iy - 1, ix - 1, iy + ih + 1, {0, 0, 0, 0.95}, 1)
-    draw.Line(ix + iw + 1, iy - 1, ix + iw + 1, iy + ih + 1, {0, 0, 0, 0.95}, 1)
-
-    draw.Line(ix, iy, ix + iw, iy, c, 1.5)
-    draw.Line(ix, iy + ih, ix + iw, iy + ih, c, 1.5)
-    draw.Line(ix, iy, ix, iy + ih, c, 1.5)
-    draw.Line(ix + iw, iy, ix + iw, iy + ih, c, 1.5)
-
-    if iw > 6 and ih > 6 then
-        draw.Line(ix + 1, iy + 1, ix + iw - 1, iy + 1, {0, 0, 0, 0.95}, 1)
-        draw.Line(ix + 1, iy + ih - 1, ix + iw - 1, iy + ih - 1, {0, 0, 0, 0.95}, 1)
-        draw.Line(ix + 1, iy + 1, ix + 1, iy + ih - 1, {0, 0, 0, 0.95}, 1)
-        draw.Line(ix + iw - 1, iy + 1, ix + iw - 1, iy + ih - 1, {0, 0, 0, 0.95}, 1)
+    if draw.Box then
+        pcall(draw.Box, x, y, w, h, col or WHITE, 0)
+    elseif draw.Rect then
+        pcall(draw.Rect, x, y, w, h, col or WHITE)
     end
 end
 
 local function draw_corner_box(x, y, w, h, col)
-    local c = col or {1, 1, 1, 1}
-    local ix, iy, iw, ih = math.floor(x), math.floor(y), math.floor(w), math.floor(h)
-    local cw = math.max(4, math.floor(iw * 0.25))
-    local ch = math.max(4, math.floor(ih * 0.20))
-    local function cseg(x1, y1, x2, y2)
-        draw.Line(x1, y1, x2, y2, {0, 0, 0, 0.95}, 2.5)
-        draw.Line(x1, y1, x2, y2, c, 1.0)
+    if draw.CornerBox then
+        pcall(draw.CornerBox, x, y, w, h, col or WHITE)
+    elseif draw.Box then
+        pcall(draw.Box, x, y, w, h, col or WHITE, 1)
+    elseif draw.Rect then
+        pcall(draw.Rect, x, y, w, h, col or WHITE)
     end
-    cseg(ix, iy, ix + cw, iy)
-    cseg(ix, iy, ix, iy + ch)
-    cseg(ix + iw, iy, ix + iw - cw, iy)
-    cseg(ix + iw, iy, ix + iw, iy + ch)
-    cseg(ix, iy + ih, ix + cw, iy + ih)
-    cseg(ix, iy + ih, ix, iy + ih - ch)
-    cseg(ix + iw, iy + ih, ix + iw - cw, iy + ih)
-    cseg(ix + iw, iy + ih, ix + iw, iy + ih - ch)
 end
 
 local function draw_health_bar(x, y, h, hp, max_hp)
-    local mhp = max_hp
-    if not mhp or mhp <= 0 then mhp = 100 end
-    local cur_hp = math.max(0, math.min(mhp, hp or 0))
-    local ratio = cur_hp / mhp
-    local bar_w = 3
-    draw.RectFilled(x - 1, y - 1, bar_w + 2, h + 2, {0, 0, 0, 0.85}, 0)
-    local fill_h = math.max(1, math.floor(h * ratio))
-    local col = health_color(ratio)
-    draw.RectFilled(x, y + (h - fill_h), bar_w, fill_h, col, 0)
+    if draw.HealthBar then
+        pcall(draw.HealthBar, x, y, h, hp or 100, max_hp or 100)
+    else
+        local mhp = max_hp or 100
+        if mhp <= 0 then mhp = 100 end
+        local ratio = math.clamp((hp or 100) / mhp, 0, 1)
+        pcall(draw.RectFilled, x, y, 4, h, {0, 0, 0, 0.7})
+        local cur_h = h * ratio
+        pcall(draw.RectFilled, x + 1, y + h - cur_h, 2, cur_h, health_color(ratio))
+    end
 end
 
-draw.CornerBox = draw_corner_box
-draw.Box = function(x, y, w, h, col) draw_esp_box(x, y, w, h, col) end
-draw.HealthBar = draw_health_bar
+local function draw_player_chams()
+if not cfg.chams then return end
+local players = frame_players
+if not players or #players == 0 then return end
+local vc = cfg.chams_vc or {0.0, 1.0, 0.3, 0.8}
+local oc = cfg.chams_oc or {1.0, 0.25, 0.25, 0.8}
+local mode = cfg.chams_m or 0
+local cam_pos = nil
+if cfg.chams_vis then pcall(function() cam_pos = camera.GetPosition() end) end
+local lp = nil
+pcall(function() lp = entity.GetLocalPlayer() end)
+local rbx_lp = nil
+pcall(function() rbx_lp = game.Players.LocalPlayer end)
+for i = 1, #players do
+    local p = players[i]
+    if p then
+        local ok = true
+        if not p.IsValid or not p.IsAlive or (p.Health and p.Health <= 0) then ok = false end
+        if ok then
+            local is_me = p.IsLocal or (lp and (p == lp or p.UserId == lp.UserId or p.Name == lp.Name))
+            if not is_me and rbx_lp then
+                if (rbx_lp.UserId and p.UserId == rbx_lp.UserId) or (rbx_lp.Name and p.Name == rbx_lp.Name) then is_me = true end
+            end
+            if not is_me then
+                local d = nil
+                pcall(function() d = p:DistanceTo() end)
+                if d and d < 3 then ok = false end
+            else ok = false end
+        end
+        if ok then
+            local is_vis = false
+            if cfg.chams_vis and cam_pos then
+                is_vis = get_cached_player_visible(cam_pos, p)
+            end
+            local col = (cfg.chams_vis and (is_vis and vc or oc)) or vc
+            pcall(draw.ChamsPlayer, p, col, mode)
+        end
+    end
+end
+end
 
 local function draw_player_esp()
 if not cfg.esp then return end
 local players = frame_players
 if not players or #players == 0 then return end
 local scx, scy = input.GetScreenCenter()
-local range_studs = cfg.esp_range * STUDS_PER_M
+local range_studs = (cfg.esp_range or 1000) * STUDS_PER_M
 
-local p_data_map = {}
-for wi = 1, #world.players do
-    local wp = world.players[wi]
-    if wp.name then
-        p_data_map[wp.name] = wp
-    end
+local p_data_map = world.player_map or {}
+local lp = entity.GetLocalPlayer()
+local rbx_lp = nil
+pcall(function() rbx_lp = game.Players.LocalPlayer end)
+local cam_pos = nil
+if cfg.esp_vis_tag or (cfg.chams and cfg.chams_vis) then
+    cam_pos = camera.GetPosition()
 end
 
 for i = 1, #players do
     local p = players[i]
     if p then
-        local lp = entity.GetLocalPlayer()
-        local rbx_lp = nil
-        pcall(function() rbx_lp = game.Players.LocalPlayer end)
+        if not p.IsValid or not p.IsAlive or (p.Health and p.Health <= 0) then goto cont end
         local is_me = p.IsLocal or (lp and (p == lp or p.UserId == lp.UserId or p.Name == lp.Name or (p.Address and lp.Address and p.Address == lp.Address)))
         if not is_me and rbx_lp then
             if (rbx_lp.UserId and p.UserId == rbx_lp.UserId) or (rbx_lp.Name and p.Name == rbx_lp.Name) or (p.Character and rbx_lp.Character and p.Character == rbx_lp.Character) then
                 is_me = true
             end
         end
+        if is_me then goto cont end
         local d_chk = p:DistanceTo()
-        if not is_me and d_chk and d_chk < 3 then is_me = true end
-        if is_me or not p.IsValid or not p.IsAlive then goto cont end
+        if d_chk and d_chk < 3 then goto cont end
         if cfg.esp_team and is_same_team(p) then goto cont end
 
         local is_staff = false
@@ -2241,88 +2451,38 @@ for i = 1, #players do
         end
 
         local dist_studs = p:DistanceTo()
-        if not dist_studs or dist_studs > range_studs then
-            player_bounds_cache[pid] = nil
-            goto cont
+        if not dist_studs or dist_studs > range_studs then goto cont end
+
+        local b = nil
+        local ok_b, gb = pcall(p.GetBounds, p)
+        if ok_b and gb and gb.valid and gb.w and gb.w > 0 and gb.h and gb.h > 0 then
+            b = gb
         end
 
-        local b = p:GetBounds()
-        if not b or not b.valid or not b.w or b.w <= 0 or not b.h or b.h <= 0 then
-            b = nil
-            local bones = p:GetBonesScreen()
-            if bones and bones["Head"] then
-                local h_pt = bones["Head"]
-                local lf_pt = bones["LeftFoot"]
-                local rf_pt = bones["RightFoot"]
-                local ut_pt = bones["UpperTorso"]
-                local top_y = h_pt[2] - 8
-                local bot_y = top_y + 30
-                if lf_pt and rf_pt then
-                    bot_y = max(lf_pt[2], rf_pt[2]) + 4
-                elseif lf_pt then
-                    bot_y = lf_pt[2] + 4
-                elseif rf_pt then
-                    bot_y = rf_pt[2] + 4
-                elseif ut_pt then
-                    bot_y = ut_pt[2] + (ut_pt[2] - top_y) * 2.2
-                end
-                local bh = max(16, bot_y - top_y)
-                local bw = bh * 0.55
-                local bx = h_pt[1] - bw * 0.5
-                b = { x = bx, y = top_y, w = bw, h = bh, valid = true }
-            end
-        end
-
-        if not b or not b.valid or not b.w or b.w <= 0 or not b.h or b.h <= 0 then
-            b = nil
+        local mid = nil
+        if b then
+            mid = b.x + b.w * 0.5
+        else
             local hp = p.HeadPosition
             local rp = p.Position
             if hp and rp then
-                local hx, hy, hvis = utility.WorldToScreen(hp.X, hp.Y + 0.9, hp.Z)
+                local hx, hy, hvis = utility.WorldToScreen(hp.X, hp.Y + 0.85, hp.Z)
                 local fx, fy, fvis = utility.WorldToScreen(rp.X, rp.Y - 2.8, rp.Z)
                 if hvis or fvis then
-                    local bh = max(16, abs(fy - hy))
+                    local bh = math.max(14, math.abs(fy - hy))
                     local bw = bh * 0.55
-                    local bx = hx - bw * 0.5
-                    local by = min(hy, fy)
+                    local cx = hvis and hx or fx
+                    local bx = cx - bw * 0.5
+                    local by = math.min(hy, fy)
                     b = { x = bx, y = by, w = bw, h = bh, valid = true }
-                end
-            elseif rp then
-                local sx, sy, svis = utility.WorldToScreen(rp.X, rp.Y, rp.Z)
-                if svis then
-                    local dist = p:DistanceTo() or 50
-                    local scale = math.max(10, 1200 / (dist + 1))
-                    local bh = scale * 5.0
-                    local bw = scale * 2.5
-                    local bx = sx - bw * 0.5
-                    local by = sy - scale * 0.8
-                    b = { x = bx, y = by, w = bw, h = bh, valid = true }
+                    mid = cx
                 end
             end
         end
 
-        local now = utility.GetTime and utility.GetTime() or tick()
-        if b and b.valid then
-            player_bounds_cache[pid] = { x = b.x, y = b.y, w = b.w, h = b.h, pos = p.Position, t = now, valid = true }
-        elseif player_bounds_cache[pid] then
-            local cached = player_bounds_cache[pid]
-            local moved_far = false
-            if p.Position and cached.pos then
-                local dx = p.Position.X - cached.pos.X
-                local dy = p.Position.Y - cached.pos.Y
-                local dz = p.Position.Z - cached.pos.Z
-                if (dx*dx + dy*dy + dz*dz) > 625 then moved_far = true end
-            end
-            if not moved_far and (now - cached.t) < 0.15 then
-                b = cached
-            else
-                player_bounds_cache[pid] = nil
-            end
-        end
+        if not b or not b.valid or not mid then goto cont end
 
-        if not b or not b.valid then goto cont end
 
-        local mid = b.x + b.w * 0.5
 
         if cfg.esp_box then
             local style = cfg.esp_style or 0
@@ -2343,20 +2503,11 @@ for i = 1, #players do
             local ratio = p.Health / mhp
             local htxt = format("%d", p.Health)
             local htw = draw.GetTextSize(htxt, 11)
-            draw.Text(b.x - 8 - htw, b.y + b.h * 0.5 - 5, htxt, health_color(ratio), 11)
+            draw.Text(b.x - 8 - htw, b.y + b.h * 0.5 - 5, htxt, cfg.esp_hp_c or health_color(ratio), 11)
         end
 
         local label_y = b.y - 2
         local p_data = p_data_map[p.Name]
-        local is_hacker = (p_data and p_data.is_cheater) or (world.hacker_tracker[p.Name] and world.hacker_tracker[p.Name].is_speeding)
-        if cfg.cheater_finder and is_hacker then
-            local ctxt = "[SPEEDHACKER]"
-            local ctw = draw.GetTextSize(ctxt, 12)
-            ctw = (type(ctw) == "number" and ctw > 0 and ctw) or 80
-            label_y = label_y - 13
-            draw.Text(mid - ctw * 0.5 + 1, label_y + 1, ctxt, {0, 0, 0, 0.95}, 12)
-            draw.Text(mid - ctw * 0.5, label_y, ctxt, {1, 0.2, 0.2, 1}, 12)
-        end
 
         if cfg.esp_name then
             local nm = (p.DisplayName and p.DisplayName ~= "" and p.DisplayName) or (p.Name and p.Name ~= "" and p.Name) or "Player"
@@ -2370,9 +2521,8 @@ for i = 1, #players do
         end
 
         local is_eye_vis = nil
-        if cfg.esp_vis_tag or (cfg.chams and cfg.chams_vis) then
-            local cam_pos = camera.GetPosition()
-            is_eye_vis = check_player_visible(cam_pos, p)
+        if (cfg.esp_vis_tag or (cfg.chams and cfg.chams_vis)) and cam_pos then
+            is_eye_vis = get_cached_player_visible(cam_pos, p)
         end
 
         if (cfg.esp_vis_tag or cfg.chams_vis) and is_eye_vis then
@@ -2381,7 +2531,7 @@ for i = 1, #players do
             local vtw = draw.GetTextSize(vtag, 11)
             label_y = label_y - 12
             draw.Text(mid - vtw * 0.5 + 1, label_y + 1, vtag, {0, 0, 0, 0.95}, 11)
-            draw.Text(mid - vtw * 0.5, label_y, vtag, vcol, 11)
+            draw.Text(mid - vtw * 0.5, label_y, vtag, cfg.esp_vis_tag_c or vcol, 11)
         end
 
         if cfg.esp_wep then
@@ -2390,7 +2540,7 @@ for i = 1, #players do
             if wep and wep ~= "" then
                 local tw = draw.GetTextSize(wep, 11)
                 label_y = label_y - 12
-                draw.Text(mid - tw * 0.5, label_y, wep, {1, 0.7, 0.3, 1}, 11)
+                draw.Text(mid - tw * 0.5, label_y, wep, cfg.esp_weapon_c or {1, 0.7, 0.3, 1}, 11)
             end
         end
 
@@ -2400,14 +2550,14 @@ for i = 1, #players do
                 local arm_str = (p_data.helmet or "-") .. " | " .. (p_data.vest or "-")
                 local tw = draw.GetTextSize(arm_str, 11)
                 label_y = label_y - 12
-                draw.Text(mid - tw * 0.5, label_y, arm_str, {0.6, 0.85, 1, 1}, 11)
+                draw.Text(mid - tw * 0.5, label_y, arm_str, cfg.esp_armor_c or {0.6, 0.85, 1, 1}, 11)
             end
         end
 
         if cfg.esp_hvt then
             local p_data = p_data_map[p.Name]
             if p_data and p_data.hvt then
-                local hvt_str = "★ HVT: " .. p_data.hvt
+                local hvt_str = "★ High Value Target: " .. p_data.hvt
                 local tw = draw.GetTextSize(hvt_str, 12)
                 label_y = label_y - 13
                 draw.Text(mid - tw * 0.5, label_y, hvt_str, cfg.esp_hvt_c or {1, 0.85, 0.2, 1}, 12)
@@ -2417,7 +2567,7 @@ for i = 1, #players do
         if cfg.esp_dist then
             local dtxt = format("%dm", floor(dist_studs * M_PER_STUD))
             local tw = draw.GetTextSize(dtxt, 11)
-            draw.Text(mid - tw * 0.5, b.y + b.h + 2, dtxt, GRAY, 11)
+            draw.Text(mid - tw * 0.5, b.y + b.h + 2, dtxt, cfg.esp_dist_c or GRAY, 11)
         end
 
         if cfg.esp_snap then
@@ -2425,28 +2575,29 @@ for i = 1, #players do
         end
 
         if cfg.esp_skel then
-            local bones = p:GetBonesScreen()
-            if bones then
-                for j = 1, #SKEL do
-                    local pair = SKEL[j]
-                    local a, sb = bones[pair[1]], bones[pair[2]]
+            local bones = nil
+            pcall(function() bones = p:GetBonesScreen() end)
+            if bones and type(bones) == "table" then
+                local col = cfg.esp_skel_c or WHITE
+                local skel_pairs = (bones["UpperTorso"] and SKEL) or (bones["Torso"] and SKEL_R6) or SKEL
+                for j = 1, #skel_pairs do
+                    local pair = skel_pairs[j]
+                    local a = bones[pair[1]]
+                    local sb = bones[pair[2]]
                     if a and sb then
-                        draw.Line(a[1], a[2], sb[1], sb[2], cfg.esp_skel_c, 1.5)
+                        local ax = a[1] or a.x or a.X
+                        local ay = a[2] or a.y or a.Y
+                        local bx = sb[1] or sb.x or sb.X
+                        local by = sb[2] or sb.y or sb.Y
+                        if ax and ay and bx and by then
+                            draw.Line(ax, ay, bx, by, col, 1.5)
+                        end
                     end
                 end
             end
         end
 
-        if cfg.chams then
-            local vc = cfg.chams_vc or {0.0, 1.0, 0.3, 1.0}
-            local oc = cfg.chams_oc or {1.0, 0.25, 0.25, 1.0}
-            if cfg.chams_vis then
-                local col = (is_eye_vis == true) and vc or oc
-                draw.ChamsPlayer(p, col, cfg.chams_m or 0)
-            else
-                draw.ChamsPlayer(p, vc, cfg.chams_m or 0)
-            end
-        end
+        -- chams handled by draw_player_chams()
 
         ::cont::
     end
@@ -2517,7 +2668,7 @@ if n.head and n.hum then
                         local dt = format("%dm", floor(dist * 0.28))
                         local tw = draw.GetTextSize(dt, 11)
                         draw.Text(mid - tw*0.5, by + bh + 2,
-                            dt, GRAY, 11)
+                            dt, cfg.npc_dist_c or GRAY, 11)
                     end
                 end
                 if cfg.npc_skel and dist < 150 then
@@ -2550,31 +2701,28 @@ end
 end
 end
 
-local function draw_world_label(part, name, col, max_r, contents, show_items)
+local function draw_world_label(part, name, col, max_r, contents, show_items, cam_pos)
 if not part or not utility.IsValid(part) then return end
 local pos = part.Position
 if not pos then return end
-local cam = camera.GetPosition()
+local cam = cam_pos or (camera and camera.GetPosition and camera.GetPosition())
 if not cam then return end
 local dist = dist3(pos.X, pos.Y, pos.Z, cam.X, cam.Y, cam.Z)
 max_r = (type(max_r) == "number" and max_r) or 3500
 if max_r > 0 and dist > (max_r / 0.28) then return end
 local sx, sy, vis = utility.WorldToScreen(pos.X, pos.Y, pos.Z)
-if not vis then
-    sx, sy, vis = draw.WorldToScreen(pos.X, pos.Y, pos.Z)
-end
 if not vis then return end
 local txt = format("%s [%dm]", name, floor(dist * 0.28))
-local tw = draw.GetTextSize(txt, 13)
-tw = (type(tw) == "number" and tw > 0 and tw) or (#txt * 7.5)
+local tw = #txt * 7.5
 col = (type(col) == "table" and col) or {0.2, 0.8, 1, 1}
 draw.Text(sx - tw*0.5, sy, txt, col, 13)
 if show_items and contents then
 local ly = sy + 14
-for j = 1, #contents do
+local max_cnt = math.min(#contents, 12)
+for j = 1, max_cnt do
     local itxt = contents[j]
-    local itw = draw.GetTextSize(itxt, 11)
-    local icol = (is_op_loot and is_op_loot(itxt)) and {1, 0.85, 0.2, 1} or GRAY
+    local itw = #itxt * 6.5
+    local icol = (is_op_loot and is_op_loot(itxt)) and {1, 0.85, 0.2, 1} or (cfg.cont_items_c or cfg.corpse_items_c or GRAY)
     draw.Text(sx - itw*0.5, ly, itxt, icol, 11)
     ly = ly + 12
 end
@@ -2582,77 +2730,73 @@ end
 end
 
 local function draw_world_esp()
+local cam = camera and camera.GetPosition and camera.GetPosition()
+if not cam then return end
+
 if cfg.cont then
+local max_c_dist = (cfg.cont_range or 500) / 0.28
+local rendered_c = 0
 for i = 1, #world.containers do
     local c = world.containers[i]
-    local items_to_show = c.contents
-    if c.contents == nil and c.model then
-        c.contents = get_inventory(c.model) or false
-        items_to_show = (c.contents ~= false) and c.contents or nil
-    elseif c.contents == false then
-        items_to_show = nil
-    end
-
-    if cfg.cont_filter == 1 then
-        local op_items = {}
-        if items_to_show then
-            for j = 1, #items_to_show do
-                if is_op_loot(items_to_show[j]) then
-                    op_items[#op_items+1] = items_to_show[j]
-                end
+    if c.part and utility.IsValid(c.part) then
+        local pos = c.part.Position
+        if pos and dist3(pos.X, pos.Y, pos.Z, cam.X, cam.Y, cam.Z) <= max_c_dist then
+            local items_to_show = (cfg.cont_filter == 1 and c.op_contents) or c.contents
+            if cfg.cont_filter ~= 1 or (items_to_show and #items_to_show > 0) then
+                draw_world_label(c.part, c.name, cfg.cont_c,
+                    cfg.cont_range, items_to_show, cfg.cont_items, cam)
+                rendered_c = rendered_c + 1
+                if rendered_c >= 60 then break end
             end
         end
-        if #op_items > 0 then
-            draw_world_label(c.part, c.name, cfg.cont_c,
-                cfg.cont_range, op_items, true)
-        end
-    else
-        draw_world_label(c.part, c.name, cfg.cont_c,
-            cfg.cont_range, items_to_show, cfg.cont_items)
     end
 end
 end
 if cfg.loot then
 local pass = LOOT_PASS[cfg.loot_f] or LOOT_PASS[0]
+local max_dist = (cfg.loot_range or 500) / 0.28
+local rendered = 0
 for i = 1, #world.items do
     local d = world.items[i]
-    local cat = get_item_category(d.name)
-    if pass[cat] then
-        draw_world_label(d.part, d.name, cfg.loot_c,
-            cfg.loot_range, nil, false)
+    local cat = d.cat or get_item_category(d.name)
+    if pass[cat] and d.part and utility.IsValid(d.part) then
+        local pos = d.part.Position
+        if pos and dist3(pos.X, pos.Y, pos.Z, cam.X, cam.Y, cam.Z) <= max_dist then
+            draw_world_label(d.part, d.name, cfg.loot_c,
+                cfg.loot_range, nil, false, cam)
+            rendered = rendered + 1
+            if rendered >= 60 then break end
+        end
     end
 end
 end
 if cfg.corpse then
+local max_c_dist = (cfg.corpse_r or 500) * STUDS_PER_M
 for i = 1, #world.corpses do
     local c = world.corpses[i]
-    local label = "CORPSE: " .. c.name
-    local corpse_items = c.contents
-    if cfg.corpse_i and corpse_items then
-        local good_c_items = {}
-        for j = 1, #corpse_items do
-            if is_good_item(corpse_items[j]) then
-                good_c_items[#good_c_items+1] = corpse_items[j]
-            end
+    if c.part and utility.IsValid(c.part) then
+        local pos = c.part.Position
+        if pos and dist3(pos.X, pos.Y, pos.Z, cam.X, cam.Y, cam.Z) <= max_c_dist then
+            local label = "CORPSE: " .. c.name
+            local corpse_items = (cfg.corpse_i and c.good_contents) or c.contents
+            draw_world_label(c.part, label, cfg.corpse_c,
+                cfg.corpse_r, corpse_items, cfg.corpse_i, cam)
         end
-        corpse_items = #good_c_items > 0 and good_c_items or nil
     end
-    draw_world_label(c.part, label, cfg.corpse_c,
-        cfg.corpse_r, corpse_items, cfg.corpse_i)
 end
 end
 if cfg.quest then
 for i = 1, #world.quests do
     local q = world.quests[i]
     draw_world_label(q.part, q.name, cfg.quest_c,
-        cfg.quest_r, nil, false)
+        cfg.quest_r, nil, false, cam)
 end
 end
 if cfg.extract then
 for i = 1, #world.extracts do
     local e = world.extracts[i]
-    draw_world_label(e.part, "Exit", cfg.extract_c,
-        cfg.extract_r, nil, false)
+    draw_world_label(e.part, e.name or "Exit", cfg.extract_c,
+        cfg.extract_r, nil, false, cam)
 end
 end
 if cfg.hazard and world.hazards then
@@ -2661,7 +2805,7 @@ for i = 1, #world.hazards do
     local hz_col = hz.type == "rad" and {0.4, 1, 0.2, 0.9} or {1, 0.4, 0, 0.9}
     local hz_prefix = hz.type == "rad" and "RAD: " or "FIRE: "
     draw_world_label(hz.part, hz_prefix .. hz.name, cfg.hazard_c or hz_col,
-        cfg.hazard_r or 1500, nil, false)
+        cfg.hazard_r or 1500, nil, false, cam)
 end
 end
 end
@@ -2894,27 +3038,26 @@ local function run_player_aim()
             pcall(function() rbx_lp = game.Players.LocalPlayer end)
             for i = 1, #players do
                 local p = players[i]
-                local is_me = p and (p.IsLocal or (lp and (p == lp or p.UserId == lp.UserId or p.Name == lp.Name or (p.Address and lp.Address and p.Address == lp.Address))))
-                if not is_me and rbx_lp and p then
-                    if (rbx_lp.UserId and p.UserId == rbx_lp.UserId) or (rbx_lp.Name and p.Name == rbx_lp.Name) or (p.Character and rbx_lp.Character and p.Character == rbx_lp.Character) then
-                        is_me = true
+                if p then
+                    if not p.IsValid or not p.IsAlive or (p.Health and p.Health <= 0) or (p.IsDead == true) then goto skip_p end
+                    local is_me = p.IsLocal or (lp and (p == lp or p.UserId == lp.UserId or p.Name == lp.Name or (p.Address and lp.Address and p.Address == lp.Address)))
+                    if not is_me and rbx_lp then
+                        if (rbx_lp.UserId and p.UserId == rbx_lp.UserId) or (rbx_lp.Name and p.Name == rbx_lp.Name) or (p.Character and rbx_lp.Character and p.Character == rbx_lp.Character) then
+                            is_me = true
+                        end
                     end
-                end
-                local d_chk = p and p:DistanceTo()
-                if not is_me and d_chk and d_chk < 3 then is_me = true end
-                if p and not is_me then
-                    local is_dead = (p.IsDead == true) or (p.Health ~= nil and p.Health <= 0)
-                    if not is_dead then
-                        if cfg.aim_team and is_same_team(p) then goto skip_p end
-                        local bone_pos, target_part = get_player_bone_pos(p, b_mode, scx, scy)
-                        if bone_pos then
-                            local bx, by, bv = utility.WorldToScreen(bone_pos.X, bone_pos.Y, bone_pos.Z)
-                            if bv then
-                                local fov = screen_dist(bx, by, scx, scy)
-                                if fov < best_p_fov then
-                                    best_p_fov = fov
-                                    best_p = { player = p, bone_pos = bone_pos, part = target_part, fov = fov, is_npc = false }
-                                end
+                    if is_me then goto skip_p end
+                    local d_chk = p:DistanceTo()
+                    if d_chk and d_chk < 3 then goto skip_p end
+                    if cfg.aim_team and is_same_team(p) then goto skip_p end
+                    local bone_pos, target_part = get_player_bone_pos(p, b_mode, scx, scy)
+                    if bone_pos then
+                        local bx, by, bv = utility.WorldToScreen(bone_pos.X, bone_pos.Y, bone_pos.Z)
+                        if bv then
+                            local fov = screen_dist(bx, by, scx, scy)
+                            if fov < best_p_fov then
+                                best_p_fov = fov
+                                best_p = { player = p, bone_pos = bone_pos, part = target_part, fov = fov, is_npc = false }
                             end
                         end
                     end
@@ -3037,6 +3180,23 @@ sil_rot_idx = 1
 -- (unused vars removed)
 
 local function run_silent_aim()
+    local scx, scy = input.GetScreenCenter()
+    if not scx or scx <= 0 or not scy or scy <= 0 then
+        scx, scy = 960, 540
+    end
+    if cfg.sil_draw then
+        local c = (type(cfg.sil_fov_c) == "table" and #cfg.sil_fov_c >= 3 and cfg.sil_fov_c)
+            or (boba_colors and (boba_colors.b_silent_fov_c or boba_colors.b_silent_fov))
+            or {1, 0.8, 0.2, 0.2}
+        local a = c[4] or 0.2
+        local fov_r = (type(cfg.sil_fov) == "number" and cfg.sil_fov > 0 and cfg.sil_fov)
+            or tonumber(get_val("b_silent_fov", 200)) or 200
+        if cfg.sil_fov_filled then
+            draw.CircleFilled(scx, scy, fov_r, {c[1], c[2], c[3], a * 0.4}, 64)
+        end
+        draw.Circle(scx, scy, fov_r, c, 64)
+    end
+
     if not cfg.silent or not is_gun_equipped() then
         if silent_ok then
             pcall(raycast.ClearSilentTarget)
@@ -3053,16 +3213,6 @@ local function run_silent_aim()
         if s_ok then silent_ok = true end
     end
     if not silent_ok then return end
-
-    local scx, scy = input.GetScreenCenter()
-    if cfg.sil_draw then
-        local c = cfg.sil_fov_c or {1, 0.8, 0.2, 0.2}
-        local a = c[4] or 0.2
-        if cfg.sil_fov_filled then
-            draw.CircleFilled(scx, scy, cfg.sil_fov or 200, {c[1], c[2], c[3], a * 0.4}, 64)
-        end
-        draw.Circle(scx, scy, cfg.sil_fov or 200, c, 64)
-    end
 
     local lp = entity.GetLocalPlayer()
     if not lp then
@@ -3081,10 +3231,10 @@ local function run_silent_aim()
 
     for i = 1, #players do
         local p = players[i]
-        local is_me = p and (p.IsLocal or (lp and (p.UserId == lp.UserId or p.Name == lp.Name or (p.Address and lp.Address and p.Address == lp.Address))))
-        if p and not is_me then
-            local is_dead = (p.IsDead == true) or (p.Health ~= nil and p.Health <= 0)
-            if not is_dead then
+        if p then
+            if not p.IsValid or not p.IsAlive or (p.Health and p.Health <= 0) or (p.IsDead == true) then goto skip end
+            local is_me = p.IsLocal or (lp and (p.UserId == lp.UserId or p.Name == lp.Name or (p.Address and lp.Address and p.Address == lp.Address)))
+            if not is_me then
                 if cfg.sil_team and is_same_team(p) then goto skip end
 
                 local bone_pos = get_player_bone_pos(p, mode == 4 and (sil_rot_idx - 1) or mode, scx, scy)
@@ -3227,7 +3377,7 @@ if not cfg.wm then return end
 local fps = utility.GetFPS()
 local theme_col, theme_sub = get_active_theme()
 local tr, tg, tb = theme_col[1], theme_col[2], theme_col[3]
-local cur_vk = menu.Get("b_menu_key") or 0x24
+local cur_vk = get_val("b_menu_key", 0x24) or 0x24
 local key_name = get_vk_name(cur_vk)
 local line1 = "ProjectBoba"
 local line2 = format("FPS: %.0f  |  Open: [%s]", fps, key_name)
@@ -3388,10 +3538,11 @@ else
 end
 
 local lines = {}
-local theme_col, theme_sub = get_active_theme()
+local theme_col = cfg.insp_c or mc("b_inspect_c", {0.4, 0.8, 1, 1})
+local theme_sub = { theme_col[1] * 0.85, theme_col[2] * 0.85, theme_col[3] * 0.85, 1.0 }
 local tr, tg, tb = theme_col[1], theme_col[2], theme_col[3]
 if not closest then
-    lines[#lines+1] = {txt = "INVENTORY INSPECTOR", col = theme_col, size = 13}
+    lines[#lines+1] = {txt = "INVENTORY CHECKER", col = theme_col, size = 13}
     lines[#lines+1] = {txt = "Aim at a player to inspect", col = GRAY, size = 11}
     lines[#lines+1] = {txt = "(Draggable header)", col = theme_sub, size = 10}
 else
@@ -3797,6 +3948,7 @@ local function apply_foliage_mods()
 end
 
 local function scan_claymores()
+if not cfg.claymore then world_claymores = {}; return end
 local ws = game.Workspace
 if not ws then return end
 local results = {}
@@ -3874,6 +4026,7 @@ end
 
 
 local function update_bosses()
+if not cfg.boss then return end
 local ws = game.Workspace
 if not ws then return end
 local ai_zones = ws:FindFirstChild("AiZones")
@@ -4041,6 +4194,7 @@ end
 
 
 local function update_mod_check()
+if not cfg.mod_alert then detected_mods = {}; return end
 local found = {}
 local players = entity.GetPlayers()
 if players then
@@ -4075,8 +4229,34 @@ draw.Text(x, y, label, tc, fs)
 end
 
 
+local last_suspects_update = 0
+local cached_suspects = {}
+
 local function draw_cheater_panel()
     if not cfg.cheater_finder then
+        cheater_drag = false
+        return
+    end
+
+    -- Instant check: only show up when there is a sus player or cheater
+    local has_sus = false
+    if world.hacker_tracker then
+        for _, ht in pairs(world.hacker_tracker) do
+            if (ht.flags and ht.flags > 0) or ht.is_speeding or (ht.max_spd and ht.max_spd >= 35) then
+                has_sus = true
+                break
+            end
+        end
+    end
+    if not has_sus and longshot_kills then
+        for _, lsk in pairs(longshot_kills) do
+            if lsk >= 3 then
+                has_sus = true
+                break
+            end
+        end
+    end
+    if not has_sus then
         cheater_drag = false
         return
     end
@@ -4086,86 +4266,78 @@ local function draw_cheater_panel()
     local PAD = 8
     local row_h = 36
 
-    -- Gather suspicious / cheater players only
-    local suspects = {}
-    local p_list = frame_players or entity.GetPlayers() or {}
-    for i = 1, #p_list do
-        local p = p_list[i]
-        if p and not p.IsLocal then
-            local pname = p.Name or "Player"
-            local ht = world.hacker_tracker[pname] or {}
-            local flags = ht.flags or 0
-            local max_spd = ht.max_spd or 0
-            local is_speeding = ht.is_speeding or false
-            local acct_age = -1
-            local ls_kills = 0
-            local kd = 0
-            local hours = 0
-            if world.players then
-                for _, wp in ipairs(world.players) do
-                    if wp.name == pname then
-                        acct_age = wp.acct_age or -1
-                        ls_kills = wp.ls_kills or 0
-                        kd = wp.kd or 0
-                        hours = wp.hours or 0
-                        break
-                    end
+    local now_t = tick()
+    if (now_t - last_suspects_update) >= 0.5 then
+        last_suspects_update = now_t
+        local suspects = {}
+        local p_list = frame_players or entity.GetPlayers() or {}
+        local p_map = world.player_map or {}
+        for i = 1, #p_list do
+            local p = p_list[i]
+            if p and not p.IsLocal then
+                local pname = p.Name or "Player"
+                local ht = (world.hacker_tracker and world.hacker_tracker[pname]) or {}
+                local flags = ht.flags or 0
+                local max_spd = ht.max_spd or 0
+                local is_speeding = ht.is_speeding or false
+                local wp = p_map[pname]
+                local acct_age = (wp and wp.acct_age) or -1
+                local ls_kills = (wp and wp.ls_kills) or (longshot_kills and longshot_kills[pname]) or 0
+                local kd = (wp and wp.kd) or 0
+                local hours = (wp and wp.hours) or 0
+
+                if ls_kills >= 5 then
+                    flags = flags + 2
+                elseif ls_kills >= 3 then
+                    flags = flags + 1
+                end
+                if acct_age >= 0 and acct_age < 30 and (flags > 0 or is_speeding) then
+                    flags = flags + 1
+                end
+
+                local is_sus = (flags > 0) or is_speeding or (max_spd >= 35) or (ls_kills >= 3)
+                if is_sus then
+                    suspects[#suspects + 1] = {
+                        name = pname,
+                        display = p.DisplayName or pname,
+                        acct_age = acct_age,
+                        ls_kills = ls_kills,
+                        kd = kd,
+                        hours = hours,
+                        flags = flags,
+                        max_spd = max_spd,
+                        is_speeding = is_speeding,
+                        userId = p.UserId or ht.userId or 0
+                    }
                 end
             end
-            -- Longshot kills add flags (3+ longshots = 1 flag, 5+ = 2)
-            if ls_kills >= 5 then
-                flags = flags + 2
-            elseif ls_kills >= 3 then
-                flags = flags + 1
-            end
-            -- New account with any other flags is extra suspicious
-            if acct_age >= 0 and acct_age < 30 and (flags > 0 or is_speeding) then
-                flags = flags + 1
-            end
-
-            -- Only include player if they are suspicious or a cheater
-            local is_sus = (flags > 0) or is_speeding or (max_spd >= 35) or (ls_kills >= 3)
-            if is_sus then
-                suspects[#suspects + 1] = {
-                    name = pname,
-                    display = p.DisplayName or pname,
-                    acct_age = acct_age,
-                    ls_kills = ls_kills,
-                    kd = kd,
-                    hours = hours,
-                    flags = flags,
-                    max_spd = max_spd,
-                    is_speeding = is_speeding,
-                    userId = p.UserId or ht.userId or 0
-                }
-            end
         end
+
+        table.sort(suspects, function(a, b)
+            if a.flags ~= b.flags then
+                return a.flags > b.flags
+            end
+            if a.ls_kills ~= b.ls_kills then
+                return a.ls_kills > b.ls_kills
+            end
+            if a.acct_age ~= b.acct_age then
+                return a.acct_age < b.acct_age
+            end
+            return a.kd > b.kd
+        end)
+        cached_suspects = suspects
     end
 
-    local menu_active = is_any_menu_open()
-    -- Only show up when there is a sus player or cheater (or menu is open so user can position it)
-    if #suspects == 0 and not menu_active then
+    local suspects = cached_suspects
+    if not suspects or #suspects == 0 then
         cheater_drag = false
         return
     end
 
-    -- Sort: highest flags first, then longshot kills, then lowest account age
-    table.sort(suspects, function(a, b)
-        if a.flags ~= b.flags then
-            return a.flags > b.flags
-        end
-        if a.ls_kills ~= b.ls_kills then
-            return a.ls_kills > b.ls_kills
-        end
-        if a.acct_age ~= b.acct_age then
-            return a.acct_age < b.acct_age
-        end
-        return a.kd > b.kd
-    end)
-
     local top_count = math.min(8, #suspects)
-    local ph = (top_count == 0) and TH or (TH + PAD + (top_count * (row_h + 4)) + 4)
+    local ph = TH + PAD + (top_count * (row_h + 4)) + 4
 
+    local menu_active = is_any_menu_open()
     if not menu_active then
         cheater_drag = false
     end
@@ -4320,6 +4492,7 @@ end
 
 
 local function scan_cars()
+    if not cfg.car then world_cars = {}; return end
     local ws = game.Workspace
     if not ws then return end
     local results = {}
@@ -4333,7 +4506,6 @@ local function scan_cars()
 
         local vseat = model:FindFirstChildOfClass("VehicleSeat")
             or model:FindFirstChild("DriveSeat")
-            or model:FindFirstChild("VehicleSeat")
         local name_match = is_car_name(model.Name)
 
         if vseat or name_match then
@@ -4348,29 +4520,17 @@ local function scan_cars()
         end
     end
 
-    -- 1. Check known vehicle folders
-    for _, fname in ipairs({"Vehicles", "Cars", "SpawnedVehicles", "VehicleSpawners", "NoCollision", "Map", "Interactables", "WorldVehicles"}) do
+    -- Check only dedicated vehicle spawn folders
+    for _, fname in ipairs({"Vehicles", "Cars", "SpawnedVehicles", "VehicleSpawners", "WorldVehicles"}) do
         local folder = ws:FindFirstChild(fname)
         if folder then
             local ok, ch = pcall(function() return folder:GetChildren() end)
             if ok and ch then
                 for _, c in ipairs(ch) do
                     check_cand(c)
-                    if c:IsA("Folder") or c:IsA("Model") then
-                        local sub_ok, sub_ch = pcall(function() return c:GetChildren() end)
-                        if sub_ok and sub_ch then
-                            for _, sc in ipairs(sub_ch) do check_cand(sc) end
-                        end
-                    end
                 end
             end
         end
-    end
-
-    -- 2. Check top-level Workspace children
-    local ok_w, wch = pcall(function() return ws:GetChildren() end)
-    if ok_w and wch then
-        for _, c in ipairs(wch) do check_cand(c) end
     end
 
     world_cars = results
@@ -4440,7 +4600,7 @@ local players = frame_players
 if players then
 for i = 1, #players do
     local p = players[i]
-    if p and p.IsValid and p.IsAlive and not p.IsLocal then
+    if p and p.IsValid and p.IsAlive and not (p.Health and p.Health <= 0) and not p.IsLocal then
         local pp = p.Position
         if pp then
             local dx = pp.X - mp.X
@@ -4545,9 +4705,21 @@ local function update_hacker_detector()
     end
 end
 
+local last_gun_check = 0
+local cached_gun_state = false
+
 is_gun_equipped = function()
+    local now_t = tick()
+    if (now_t - last_gun_check) < 0.25 then
+        return cached_gun_state
+    end
+    last_gun_check = now_t
+
     local lp = entity.GetLocalPlayer()
-    if not lp or not lp.IsAlive then return false end
+    if not lp or not lp.IsAlive then
+        cached_gun_state = false
+        return false
+    end
 
     local eq_name = nil
     pcall(function()
@@ -4580,6 +4752,7 @@ is_gun_equipped = function()
     end
 
     if not eq_name or eq_name == "" or eq_name:lower() == "none" or eq_name:lower() == "hands" then
+        cached_gun_state = false
         return false
     end
 
@@ -4594,12 +4767,16 @@ is_gun_equipped = function()
         or low:find("food") or low:find("drink") or low:find("bottle")
         or low:find("can") or low:find("key") or low:find("card")
         or low:find("grenade") or low:find("f1") or low:find("rgd") then
+        cached_gun_state = false
         return false
     end
 
     if WEAPON_CALIBER then
         for k in pairs(WEAPON_CALIBER) do
-            if low:find(k:lower(), 1, true) then return true end
+            if low:find(k:lower(), 1, true) then
+                cached_gun_state = true
+                return true
+            end
         end
     end
     if low:find("rifle") or low:find("pistol") or low:find("shotgun") or low:find("smg")
@@ -4615,9 +4792,11 @@ is_gun_equipped = function()
         or low:find("deagle") or low:find("usp") or low:find("vector") or low:find("ump")
         or low:find("mpx") or low:find("p90") or low:find("sr25") or low:find("g3")
         or low:find("l96") or low:find("awm") or low:find("awp") or low:find("rpk") then
+        cached_gun_state = true
         return true
     end
 
+    cached_gun_state = true
     return true
 end
 
@@ -4702,11 +4881,13 @@ local function get_gun_muzzle_pos()
 end
 
 local function check_combat_hits()
+    local is_hl_on = (cfg.hit_logs == true)
+    local is_hm_on = (cfg.hitmarker == true)
+    local is_tracer_on = (cfg.bullet_tracers == true)
+    if not is_hl_on and not is_hm_on and not is_tracer_on then return end
+
     local now = os.clock()
-    local hit_dur = cfg.hit_log_dur or menu.Get("b_hit_log_duration") or 4.0
-    local is_hl_on = cfg.hit_logs or menu.Get("b_hit_logs")
-    local is_hm_on = cfg.hitmarker or menu.Get("b_hitmarker")
-    local is_tracer_on = cfg.bullet_tracers or menu.Get("b_bullet_tracers")
+    local hit_dur = cfg.hit_log_dur or 4.0
 
     -- 1. Check other Players live health
     for i = 1, #frame_players do
@@ -4761,27 +4942,27 @@ local function check_combat_hits()
             if dmg > 0 then
                 local is_my_hit = false
                 local time_since_shot = now - (world.my_last_shot_time or 0)
-                if time_since_shot >= 0 and time_since_shot <= 1.25 then
+                if time_since_shot >= 0 and time_since_shot <= 2.0 then
                     if world.my_last_target_key and (world.my_last_target_key == key or world.my_last_target_name == p.Name) then
+                        is_my_hit = true
+                    elseif world.silent_target_pos and pos and dist3(pos.X, pos.Y, pos.Z, world.silent_target_pos.X, world.silent_target_pos.Y, world.silent_target_pos.Z) <= 8.0 then
                         is_my_hit = true
                     elseif world.my_last_shot_look and pos then
                         local cam_pos = camera.GetPosition()
                         if cam_pos then
                             local v = pos - cam_pos
                             local proj = v.X * world.my_last_shot_look.X + v.Y * world.my_last_shot_look.Y + v.Z * world.my_last_shot_look.Z
-                            if proj > 1.2 then
+                            if proj > 0.5 then
                                 local rx = cam_pos.X + world.my_last_shot_look.X * proj
                                 local ry = cam_pos.Y + world.my_last_shot_look.Y * proj
                                 local rz = cam_pos.Z + world.my_last_shot_look.Z * proj
-                                if dist3(pos.X, pos.Y, pos.Z, rx, ry, rz) <= 9.0 then
+                                if dist3(pos.X, pos.Y, pos.Z, rx, ry, rz) <= 15.0 then
                                     is_my_hit = true
                                 end
                             end
                         end
-                    elseif world.silent_target_pos and pos then
-                        if dist3(pos.X, pos.Y, pos.Z, world.silent_target_pos.X, world.silent_target_pos.Y, world.silent_target_pos.Z) <= 6.0 then
-                            is_my_hit = true
-                        end
+                    else
+                        is_my_hit = true
                     end
                 end
 
@@ -4877,27 +5058,27 @@ local function check_combat_hits()
                 if dmg > 0 then
                     local is_my_hit = false
                     local time_since_shot = now - (world.my_last_shot_time or 0)
-                    if time_since_shot >= 0 and time_since_shot <= 1.25 then
+                    if time_since_shot >= 0 and time_since_shot <= 2.0 then
                         if world.my_last_target_key and (world.my_last_target_key == key or world.my_last_target_name == npc.name) then
+                            is_my_hit = true
+                        elseif world.silent_target_pos and pos and dist3(pos.X, pos.Y, pos.Z, world.silent_target_pos.X, world.silent_target_pos.Y, world.silent_target_pos.Z) <= 8.0 then
                             is_my_hit = true
                         elseif world.my_last_shot_look and pos then
                             local cam_pos = camera.GetPosition()
                             if cam_pos then
                                 local v = pos - cam_pos
                                 local proj = v.X * world.my_last_shot_look.X + v.Y * world.my_last_shot_look.Y + v.Z * world.my_last_shot_look.Z
-                                if proj > 1.2 then
+                                if proj > 0.5 then
                                     local rx = cam_pos.X + world.my_last_shot_look.X * proj
                                     local ry = cam_pos.Y + world.my_last_shot_look.Y * proj
                                     local rz = cam_pos.Z + world.my_last_shot_look.Z * proj
-                                    if dist3(pos.X, pos.Y, pos.Z, rx, ry, rz) <= 9.0 then
+                                    if dist3(pos.X, pos.Y, pos.Z, rx, ry, rz) <= 15.0 then
                                         is_my_hit = true
                                     end
                                 end
                             end
-                        elseif world.silent_target_pos and pos then
-                            if dist3(pos.X, pos.Y, pos.Z, world.silent_target_pos.X, world.silent_target_pos.Y, world.silent_target_pos.Z) <= 6.0 then
-                                is_my_hit = true
-                            end
+                        else
+                            is_my_hit = true
                         end
                     end
 
@@ -5048,11 +5229,6 @@ local function draw_bullet_tracers()
                 end
             end
         end
-    else
-        local cur_ammo = get_local_ammo()
-        if cur_ammo ~= nil then
-            world.last_ammo = cur_ammo
-        end
     end
 
     if not is_tracer_on then return end
@@ -5142,10 +5318,12 @@ local function draw_hit_logs()
             local ly = y_start + (i - 1) * 23
 
             draw.RectFilled(lx, ly, box_w, box_h, {0.04, 0.04, 0.06, alpha * 0.88}, 3)
-            draw.Rect(lx, ly, box_w, box_h, {0.25, 0.65, 1.0, alpha * 0.75}, 3, 1)
+            local hcol = cfg.hit_logs_c or {0.25, 0.65, 1.0, 1.0}
+            draw.Rect(lx, ly, box_w, box_h, {hcol[1], hcol[2], hcol[3], alpha * (hcol[4] or 0.75)}, 3, 1)
 
             draw.Text(lx + pad_x + 1, ly + pad_y + 1, log.text, {0, 0, 0, alpha * 0.95}, 12)
-            draw.Text(lx + pad_x, ly + pad_y, log.text, {0.55, 0.9, 1.0, alpha}, 12)
+            local hcol = cfg.hit_logs_c or {0.55, 0.9, 1.0, 1.0}
+            draw.Text(lx + pad_x, ly + pad_y, log.text, {hcol[1], hcol[2], hcol[3], alpha * (hcol[4] or 1.0)}, 12)
             i = i + 1
         end
     end
@@ -5163,7 +5341,8 @@ local function draw_hitmarker()
     local s = 11
     local gap = 3
     local is_head = world.hitmarker.is_head
-    local col = is_head and {1.0, 0.22, 0.22, alpha} or {1.0, 1.0, 1.0, alpha}
+    local base_hm = cfg.hitmarker_c or {1.0, 1.0, 1.0, 1.0}
+    local col = is_head and {1.0, 0.22, 0.22, alpha} or {base_hm[1], base_hm[2], base_hm[3], alpha * (base_hm[4] or 1.0)}
     local shadow_col = {0.0, 0.0, 0.0, alpha * 0.9}
 
     -- Always draw crisp crosshair hitmarker at screen center
@@ -5201,7 +5380,7 @@ if not mp then return end
 local cx, cy, cz = mp.X, mp.Y, mp.Z
 for i = 1, #world.corpses do
 local c = world.corpses[i]
-local pos = c.part and c.part.Position
+local pos = c.part and utility.IsValid(c.part) and c.part.Position
 if pos then
     local d = dist3(pos.X, pos.Y, pos.Z, cx, cy, cz)
     if d <= cfg.corpse_r * STUDS_PER_M then
@@ -5343,7 +5522,7 @@ local function run_wep_chams()
     end
 
     local now = utility.GetTickCount()
-    if (now - wep_last_update) < 40 then return end
+    if (now - wep_last_update) < 100 then return end
     wep_last_update = now
 
     local c = cfg.wep_chams_c or {0.2, 0.85, 1.0, 1.0}
@@ -5793,31 +5972,29 @@ function apply_skins_now()
         notify.Warning("Skin Changer", "Select a skin from the dropdown first!")
     end
 
-    thread.Create(function()
-        pcall(function()
-            local rep = game.ReplicatedStorage
-            local remotes = rep and rep:FindFirstChild("Remotes")
-            local cs = remotes and remotes:FindFirstChild("ChangeSkin")
-            if cs and (cs:IsA("RemoteFunction") or cs.InvokeServer) then
-                local k_idx = cfg.skin_knife or 0
-                if k_idx > 0 and KNIFE_NAMES[k_idx] then
-                    pcall(function() cs:InvokeServer("Melee", KNIFE_NAMES[k_idx]) end)
-                end
-                local g_idx = cfg.skin_gun or 0
-                if g_idx > 0 and GUN_SKINS[g_idx] then
-                    local g_def = GUN_SKINS[g_idx]
-                    pcall(function() cs:InvokeServer(g_def.weapon, g_def.skin) end)
-                end
+    pcall(function()
+        local rep = game.ReplicatedStorage
+        local remotes = rep and rep:FindFirstChild("Remotes")
+        local cs = remotes and remotes:FindFirstChild("ChangeSkin")
+        if cs and (cs:IsA("RemoteFunction") or cs.InvokeServer) then
+            local k_idx = cfg.skin_knife or 0
+            if k_idx > 0 and KNIFE_NAMES[k_idx] then
+                pcall(function() cs:InvokeServer("Melee", KNIFE_NAMES[k_idx]) end)
             end
-        end)
-    end, 200)
+            local g_idx = cfg.skin_gun or 0
+            if g_idx > 0 and GUN_SKINS[g_idx] then
+                local g_def = GUN_SKINS[g_idx]
+                pcall(function() cs:InvokeServer(g_def.weapon, g_def.skin) end)
+            end
+        end
+    end)
 end
 
 last_skin_auto_apply = 0
 function auto_apply_skins()
     if not cfg.skin_enable then return end
     local now = utility.GetTickCount()
-    if (now - last_skin_auto_apply) < 300 then return end
+    if (now - last_skin_auto_apply) < 3000 then return end
     last_skin_auto_apply = now
     apply_skins_silent()
 end
@@ -5828,8 +6005,7 @@ fov_applied = false
 last_applied_fov = nil
 
 local function run_fov_changer()
-    local enabled = menu.Get("b_fov_changer")
-    if enabled == nil then enabled = true end
+    local enabled = (cfg.fov_changer == true)
 
     local cam = get_cam_instance()
     local rad_70 = math.rad(70)
@@ -5862,8 +6038,7 @@ local function run_fov_changer()
         end
     end
 
-    local raw_val = menu.Get("b_fov_val")
-    local user_target = (type(raw_val) == "number" and raw_val) or cfg.fov_val or 90
+    local user_target = cfg.fov_val or 90
     user_target = clamp(floor(user_target), 70, 110)
     local target_rad = math.rad(user_target)
 
@@ -5925,1057 +6100,407 @@ end
 
 
 
-local draw_nixware_menu = (function()
-local ui = {
-    visible = true,
-    centered = false,
-    user_dragged = false,
-    x = 551,
-    y = 280,
-    w = 818,
-    h = 520,
-    dragging = false,
-    drag_ox = 0,
-    drag_oy = 0,
-    tab = 0,
-    active_slider = nil,
-    active_bind = nil,
-    bind_armed = false,
-    binding_key = false,
-    last_lmb = false,
-    last_toggle_key = false,
-    intro_start = tick(),
-    intro_done = false,
-    tabs = {
-        { icon = "A", label = "Aimbots" },
-        { icon = "E", label = "Visuals" },
-        { icon = "H", label = "Chams" },
-        { icon = "M", label = "Misc" },
-        { icon = "C", label = "Config" }
-    },
-    cfg_name_buf = "",
-    cfg_focus = false,
-    selected_cfg = "default",
-    cfg_files_list = {"default"},
-    last_keys = {},
-    prev_visible = false,
-    PALETTE = {
-        { name = "Red", col = {1.0, 0.25, 0.25, 1.0} },
-        { name = "Grn", col = {0.25, 0.95, 0.35, 1.0} },
-        { name = "Blu", col = {0.25, 0.65, 1.0, 1.0} },
-        { name = "Yel", col = {1.0, 0.90, 0.20, 1.0} },
-        { name = "Cyn", col = {0.15, 0.95, 1.0, 1.0} },
-        { name = "Mag", col = {1.0, 0.20, 0.85, 1.0} },
-        { name = "Pnk", col = {1.0, 0.45, 0.75, 1.0} },
-        { name = "Tur", col = {0.20, 0.90, 0.75, 1.0} },
-        { name = "Wht", col = {1.0, 1.0, 1.0, 1.0} },
-        { name = "Orn", col = {1.0, 0.55, 0.15, 1.0} }
-    }
-}
-world.menu_ui = ui
+local init_native_menu = function()
+    if type(menu) ~= 'table' or not menu.AddGroup then return end
 
+    local tab_aim = "Aimbot"
+    local tab_sil = "Silent Aim"
+    local tab_na  = "NPC Aimbot"
+    local tab_esp = "Player ESP"
+    local tab_chm = "Player Chams"
+    local tab_npc = "NPCs"
+    local tab_wld = "World ESP"
+    local tab_inv = "Inventory"
+    local tab_cbt = "Combat Mods"
+    local tab_cfg = "Config"
+    local tab_main = tab_aim
 
-
-
-
-
-_G.NixwareSyncVal = function(id, val)
-    set_val(id, val)
-end
-
-pcall(function()
-    if read_config_list then
-        ui.cfg_files_list = read_config_list()
-    end
-end)
-
-local function draw_menu()
-    boba_menu_open = ui.visible
-    local now_t = tick()
-
-    if not ui.centered then
-        local scx, scy = input.GetScreenCenter()
-        if not scx or scx <= 0 then
-            local sw, sh = utility.GetScreenSize()
-            if sw and sw > 0 then scx = sw * 0.5; scy = sh * 0.5 end
-        end
-        if scx and scy and scx > 0 and scy > 0 then
-            ui.x = math.max(10, math.floor(scx - ui.w * 0.5))
-            ui.y = math.max(10, math.floor(scy - ui.h * 0.5))
-            ui.centered = true
-        end
-    end
-
-    if not ui.intro_done then
-        local el = now_t - (ui.intro_start or now_t)
-        if el < 2.5 then
-            local scx, scy = input.GetScreenCenter()
-            local sw = scx * 2
-            local sh = scy * 2
-            local a = 1.0
-            if el > 1.8 then
-                a = math.max(0, (2.5 - el) / 0.7)
-            elseif el < 0.4 then
-                a = math.min(1.0, el / 0.4)
-            end
-            draw.RectFilled(0, 0, sw, sh, {0.02, 0.02, 0.03, a}, 0)
-            local t = "Project Boba"
-            local sub = "Vector Suite Active"
-            local tw, _ = draw.GetTextSize(t, 30)
-            tw = (type(tw) == "number" and tw) or 170
-            local sw_txt, _ = draw.GetTextSize(sub, 13)
-            sw_txt = (type(sw_txt) == "number" and sw_txt) or 120
-            draw.Line(scx - 110, scy + 24, scx + 110, scy + 24, {0.25, 0.65, 1.0, a * 0.9}, 2)
-            draw.Text(scx - math.floor(tw / 2) + 1, scy - 18 + 1, t, {0, 0, 0, a}, 30)
-            draw.Text(scx - math.floor(tw / 2), scy - 18, t, {1.0, 1.0, 1.0, a}, 30)
-            draw.Text(scx - math.floor(sw_txt / 2), scy + 34, sub, {0.7, 0.7, 0.75, a * 0.85}, 13)
-        else
-            ui.intro_done = true
-        end
-    end
-
-    local mx, my = nil, nil
-    if input and type(input.GetMousePosition) == "function" then
-        pcall(function() mx, my = input.GetMousePosition() end)
-    end
-    if not mx and utility and type(utility.GetMousePos) == "function" then
-        pcall(function() mx, my = utility.GetMousePos() end)
-    end
-    if not mx and input and type(input.GetMousePos) == "function" then
-        pcall(function() mx, my = input.GetMousePos() end)
-    end
-    mx = (type(mx) == "number" and mx) or 0
-    my = (type(my) == "number" and my) or 0
-
-    local lmb = input.IsKeyDown(0x01) or false
-    local is_click = lmb and not ui.last_lmb
-
-    local is_rainbow = (get_val("b_rainbow_mode", false) == true)
-    local cur_theme_idx = get_val("b_menu_theme", 0) or 0
-    local cur_theme_data = THEMES[cur_theme_idx + 1] or THEMES[1]
-
-    local theme_col, theme_sub, theme_dim
-    if is_rainbow then
-        theme_col = hsv_to_rgb((now_t * 0.35) % 1.0, 0.85, 1.0)
-        theme_sub = hsv_to_rgb((now_t * 0.35 + 0.38) % 1.0, 0.85, 1.0)
-        theme_dim = { theme_sub[1] * 0.75, theme_sub[2] * 0.75, theme_sub[3] * 0.75, 1.0 }
-    else
-        theme_col = cur_theme_data.col
-        theme_sub = { theme_col[1] * 0.88, theme_col[2] * 0.88, theme_col[3] * 0.88, 1.0 }
-        theme_dim = { theme_col[1] * 0.70, theme_col[2] * 0.70, theme_col[3] * 0.70, 1.0 }
-    end
-
-    local is_hard = (get_val("b_hard_side", false) == true)
-    local tr, tg, tb = theme_col[1], theme_col[2], theme_col[3]
-
-    local main_bg_a = is_hard and 0.95 or 0.42
-    local card_bg_a = is_hard and 0.96 or 0.38
-    local side_bg_a = is_hard and 0.96 or 0.35
-    local bar_bg_a  = is_hard and 0.98 or 0.50
-
-    local bg_tint   = { 0.04 + tr * 0.08, 0.04 + tg * 0.08, 0.05 + tb * 0.08, main_bg_a }
-    local card_tint = { 0.06 + tr * 0.09, 0.06 + tg * 0.09, 0.07 + tb * 0.09, card_bg_a }
-    local side_tint = { 0.05 + tr * 0.08, 0.05 + tg * 0.08, 0.06 + tb * 0.08, side_bg_a }
-    local bar_tint  = { 0.07 + tr * 0.12, 0.07 + tg * 0.12, 0.08 + tb * 0.12, bar_bg_a }
-
-    local cur_toggle_vk = get_val("b_menu_key", 0x24) or 0x24
-
-    if ui.active_bind then
-        if not ui.bind_armed then
-            if not input.IsKeyDown(0x01) and not input.IsKeyDown(0x02) then
-                ui.bind_armed = true
-            end
-        else
-            if input.IsKeyDown(0x1B) then
-                ui.active_bind = nil
-                ui.bind_armed = false
-            else
-                local found_vk = nil
-                local mouse_vks = {0x02, 0x01, 0x04, 0x05, 0x06}
-                for _, mvk in ipairs(mouse_vks) do
-                    local is_down = input.IsKeyDown(mvk)
-                    if is_down and not ui.last_keys[mvk] then
-                        found_vk = mvk
-                        break
-                    end
-                    ui.last_keys[mvk] = is_down
-                end
-                if not found_vk then
-                    local specific_mods = {0xA1, 0xA0, 0xA3, 0xA2, 0xA5, 0xA4, 0x20, 0x09, 0x14}
-                    for _, mvk in ipairs(specific_mods) do
-                        local is_down = input.IsKeyDown(mvk)
-                        if is_down and not ui.last_keys[mvk] then
-                            found_vk = mvk
-                            break
-                        end
-                        ui.last_keys[mvk] = is_down
-                    end
-                end
-                if not found_vk then
-                    for vk = 0x08, 0xFE do
-                        if vk ~= 0x10 and vk ~= 0x11 and vk ~= 0x12 then
-                            local is_down = input.IsKeyDown(vk)
-                            if is_down and not ui.last_keys[vk] then
-                                found_vk = vk
-                                break
-                            end
-                            ui.last_keys[vk] = is_down
-                        end
-                    end
-                end
-                if found_vk then
-                    if ui.active_bind == "aim_key" then
-                        set_val("b_aim_key", found_vk)
-                    elseif ui.active_bind == "npc_aim_key" then
-                        set_val("b_npc_aim_key", found_vk)
-                    elseif ui.active_bind == "menu_key" then
-                        set_val("b_menu_key", found_vk)
-                        cur_toggle_vk = found_vk
-                    end
-                    ui.active_bind = nil
-                    ui.bind_armed = false
-                    ui.last_keys[found_vk] = true
-                end
-            end
-        end
-    end
-
-    local toggle_down = false
-    if not ui.binding_key then
-        toggle_down = input.IsKeyDown(cur_toggle_vk) or false
-    end
-    if toggle_down and not ui.last_toggle_key then
-        ui.visible = not ui.visible
-        boba_menu_open = ui.visible
-        if ui.visible and not ui.user_dragged then
-            local scx, scy = input.GetScreenCenter()
-            if not scx or scx <= 0 then
-                local sw, sh = utility.GetScreenSize()
-                if sw and sw > 0 then scx = sw * 0.5; scy = sh * 0.5 end
-            end
-            if scx and scy and scx > 0 and scy > 0 then
-                ui.x = math.max(10, math.floor(scx - ui.w * 0.5))
-                ui.y = math.max(10, math.floor(scy - ui.h * 0.5))
-            end
-        end
-    end
-    ui.last_toggle_key = toggle_down
-
-    if not ui.visible then
-        if ui.prev_visible then
-            ui.prev_visible = false
-            pcall(function()
-                local uis = game:GetService("UserInputService")
-                if uis then
-                    if Enum.OverrideMouseIconBehavior then
-                        uis.OverrideMouseIconBehavior = Enum.OverrideMouseIconBehavior.None
-                    end
-                    uis.MouseBehavior = Enum.MouseBehavior.LockCenter
-                    uis.MouseIconEnabled = false
-                end
-                -- Restore camera to normal
-                local cam = workspace.CurrentCamera
-                if cam then
-                    cam.CameraType = ui.saved_cam_type or Enum.CameraType.Custom
-                end
-                -- Re-enable PD's camera controller scripts
-                local lp = game.Players.LocalPlayer
-                if lp and lp.Character then
-                    local omi = lp.Character:FindFirstChild("Override_MobileInput")
-                    if omi then
-                        for _, child in ipairs(omi:GetChildren()) do
-                            if child:IsA("LocalScript") then
-                                child.Disabled = false
-                            end
-                        end
-                    end
-                end
-                -- Re-enable PlayerModule camera script
-                if ui.saved_cam_script then
-                    pcall(function() ui.saved_cam_script.Disabled = false end)
-                    ui.saved_cam_script = nil
-                end
-                local cas = game:GetService("ContextActionService")
-                if cas then
-                    cas:UnbindAction("BobaMenuSink")
-                    cas:UnbindAction("BobaMoveSink")
-                end
-                pcall(function()
-                    local rs = game:GetService("RunService")
-                    if rs then
-                        rs:UnbindFromRenderStep("BobaCamLock")
-                    end
-                end)
-            end)
-        end
-        ui.last_lmb = lmb
-        return
-    end
-
-
-    if not ui.prev_visible then
-        ui.prev_visible = true
-        pcall(function()
-            -- Save current camera state before freezing
-            local cam = workspace.CurrentCamera
-            if cam then
-                ui.saved_cam_type = cam.CameraType
-                ui.saved_cam_cf = cam.CFrame
-            end
-            -- Disable PD's camera controller scripts so they stop fighting us
-            local lp = game.Players.LocalPlayer
-            if lp and lp.Character then
-                local omi = lp.Character:FindFirstChild("Override_MobileInput")
-                if omi then
-                    for _, child in ipairs(omi:GetChildren()) do
-                        if child:IsA("LocalScript") then
-                            child.Disabled = true
-                        end
-                    end
-                end
-            end
-            -- Also disable any PlayerModule camera scripts
-            pcall(function()
-                local pm = lp.PlayerScripts:FindFirstChild("PlayerModule")
-                if pm then
-                    local cc = pm:FindFirstChild("CameraModule") or pm:FindFirstChild("CameraController")
-                    if cc and cc:IsA("LocalScript") then
-                        ui.saved_cam_script = cc
-                        cc.Disabled = true
-                    end
-                end
-            end)
-            local cas = game:GetService("ContextActionService")
-            if cas then
-                -- Sink mouse clicks, movement, and wheel so Roblox camera doesn't rotate
-                cas:BindActionAtPriority("BobaMenuSink", function()
-                    return Enum.ContextActionResult.Sink
-                end, false, 10000,
-                    Enum.UserInputType.MouseButton1,
-                    Enum.UserInputType.MouseButton2,
-                    Enum.UserInputType.MouseButton3,
-                    Enum.UserInputType.MouseMovement,
-                    Enum.UserInputType.MouseWheel)
-                -- Sink WASD + Space + Shift to prevent movement
-                cas:BindActionAtPriority("BobaMoveSink", function()
-                    return Enum.ContextActionResult.Sink
-                end, false, 10000,
-                    Enum.KeyCode.W, Enum.KeyCode.A, Enum.KeyCode.S, Enum.KeyCode.D,
-                    Enum.KeyCode.Space, Enum.KeyCode.LeftShift, Enum.KeyCode.RightShift)
-            end
-            pcall(function()
-                local rs = game:GetService("RunService")
-                if rs then
-                    rs:BindToRenderStep("BobaCamLock", Enum.RenderPriority.Camera.Value + 10, function()
-                        local cam = workspace.CurrentCamera
-                        if cam and ui.saved_cam_cf then
-                            cam.CameraType = Enum.CameraType.Scriptable
-                            cam.CFrame = ui.saved_cam_cf
-                        end
-                    end)
-                end
-            end)
-        end)
-    end
-
-    -- Re-apply camera freeze + cursor unlock EVERY FRAME while menu is open
-    -- PD's camera scripts fight these settings, so we brute-force override
     pcall(function()
-        local uis = game:GetService("UserInputService")
-        if uis then
-            uis.MouseBehavior = Enum.MouseBehavior.Default
-            uis.MouseIconEnabled = true
-            if Enum.OverrideMouseIconBehavior then
-                uis.OverrideMouseIconBehavior = Enum.OverrideMouseIconBehavior.ForceShow
-            end
-        end
-        -- Freeze camera — force CameraType AND CFrame every frame
-        local cam = workspace.CurrentCamera
-        if cam then
-            cam.CameraType = Enum.CameraType.Scriptable
-            -- Lock CFrame to what it was when menu opened
-            if ui.saved_cam_cf then
-                cam.CFrame = ui.saved_cam_cf
-            end
+        if menu.AddTab then
+            menu.AddTab(tab_aim, "A")
+            menu.AddTab(tab_sil, "S")
+            menu.AddTab(tab_na,  "N")
+            menu.AddTab(tab_esp, "P")
+            menu.AddTab(tab_chm, "C")
+            menu.AddTab(tab_npc, "E")
+            menu.AddTab(tab_wld, "W")
+            menu.AddTab(tab_inv, "I")
+            menu.AddTab(tab_cbt, "M")
+            menu.AddTab(tab_cfg, "O")
         end
     end)
 
-
-
-    local title_h = 28
-    local px = ui.x
-    local py = ui.y
-
-    if is_click then
-        if mx >= px and mx <= px + ui.w and my >= py and my <= py + title_h then
-            ui.dragging = true
-            ui.user_dragged = true
-            ui.drag_ox = mx - px
-            ui.drag_oy = my - py
-        end
-    end
-
-    if ui.dragging then
-        if lmb then
-            ui.x = math.max(0, mx - ui.drag_ox)
-            ui.y = math.max(0, my - ui.drag_oy)
-            px = ui.x
-            py = ui.y
-        else
-            ui.dragging = false
-        end
-    end
-
-    draw.RectFilled(px, py, ui.w, ui.h, bg_tint, 0)
-    draw.Rect(px, py, ui.w, ui.h, {0.02, 0.02, 0.02, 1.0}, 0, 1.5)
-
-    draw.RectFilled(px, py, ui.w, title_h, bar_tint, 0)
-    draw.Line(px, py + title_h, px + ui.w, py + title_h, {0.02, 0.02, 0.02, 1.0}, 1.0)
-
-    draw.Text(px + 8, py + 3, "ProjectBoba", theme_col, 14)
-    local cur_tab_title = (ui.tabs[ui.tab + 1] and ui.tabs[ui.tab + 1].label) or "Menu"
-    draw.Text(px + 315, py + 3, "[ " .. cur_tab_title .. " ]", theme_col, 14)
-
-    local close_btn_w = 20
-    local close_x = px + ui.w - 22
-    local close_y = py + 1
-    local close_hov = mx >= close_x and mx <= close_x + close_btn_w and my >= close_y and my <= close_y + title_h - 2
-    if is_click and close_hov then
-        ui.visible = false
-        boba_menu_open = false
-    end
-    draw.Text(close_x + 5, close_y + 2, "x", close_hov and {1.0, 0.4, 0.4, 1.0} or {0.6, 0.6, 0.6, 1.0}, 13)
-
-    local side_x = px + 9
-    local side_y = py + 30
-    local side_w = 58
-    local side_h = 481
-
-    draw.RectFilled(side_x, side_y, side_w, side_h, side_tint, 0)
-    draw.Rect(side_x, side_y, side_w, side_h, {0.02, 0.02, 0.02, 1.0}, 0, 1.5)
-
-    for i, t in ipairs(ui.tabs) do
-        local tid = i - 1
-        local tx = side_x + 2
-        local ty = side_y + 10 + tid * 52
-        local tw = 54
-        local th = 49
-        local active = (ui.tab == tid)
-        local hov = mx >= tx and mx <= tx + tw and my >= ty and my <= ty + th
-
-        draw.RectFilled(tx, ty, tw, th, {0.08, 0.08, 0.09, side_bg_a}, 0)
-        if active then
-            draw.RectFilled(tx, ty, 2, th, theme_col, 0)
-            draw.Text(tx + 22, ty + 16, t.icon, theme_col, 16)
-        else
-            if hov then
-                draw.RectFilled(tx, ty, tw, th, {0.15, 0.15, 0.15, 0.8}, 0)
+    local function setup_toggle(parent_id, children, on_change)
+        if not menu.SetCallback or not menu.SetVisible then return end
+        menu.SetCallback(parent_id, function(on)
+            for i = 1, #children do
+                pcall(menu.SetVisible, children[i], on)
             end
-            draw.Text(tx + 22, ty + 16, t.icon, {0.55, 0.55, 0.55, 1.0}, 16)
-        end
-
-        if is_click and hov then
-            ui.tab = tid
+            if on_change then pcall(on_change, on) end
+        end)
+        local init_val = menu.Get(parent_id) or false
+        for i = 1, #children do
+            pcall(menu.SetVisible, children[i], init_val)
         end
     end
 
-    local function draw_card(cx, cy, cw, ch, title)
-        draw.RectFilled(cx, cy, cw, ch, card_tint, 0)
-        draw.Rect(cx, cy, cw, ch, {0.02, 0.02, 0.02, 1.0}, 0, 1.5)
+    -- ==========================================
+    -- TAB 1: BOBA (Main Suite)
+    -- ==========================================
 
-        draw.RectFilled(cx, cy, cw, 22, bar_tint, 0)
-        draw.Line(cx, cy + 22, cx + cw, cy + 22, {0.02, 0.02, 0.02, 1.0}, 1.0)
-        draw.Text(cx + 10, cy + 3, title, theme_col, 14)
-    end
+    -- Group 1: Aimbot
+    pcall(function()
+        menu.AddGroup(tab_main, "Aimbot")
+        menu.AddCheckbox(tab_main, "Aimbot", "b_aim", "Enable Aimbot", false)
+        menu.AddCombo(tab_main, "Aimbot", "b_aim_bone", "Target Bone", {"Head", "Chest", "Torso", "Random"}, 0, { parent = "b_aim" })
+        menu.AddHotkey(tab_main, "Aimbot", "b_aim_key", "Aim Key", 0x02, { parent = "b_aim" })
+        menu.AddCombo(tab_main, "Aimbot", "b_aim_mode", "Aim Mode", {"Hold", "Toggle"}, 0, { parent = "b_aim" })
+        menu.AddSliderInt(tab_main, "Aimbot", "b_aim_fov", "FOV Radius", 1, 360, 90, "%d°", { parent = "b_aim" })
+        menu.AddSliderFloat(tab_main, "Aimbot", "b_aim_smooth", "Smoothness", 1.0, 30.0, 5.0, "%.1f", { parent = "b_aim" })
+        menu.AddCheckbox(tab_main, "Aimbot", "b_aim_pred", "Bullet Drop Prediction", false, { parent = "b_aim" })
+        menu.AddCheckbox(tab_main, "Aimbot", "b_aim_lead", "Velocity Lead", false, { parent = "b_aim" })
+        menu.AddCheckbox(tab_main, "Aimbot", "b_aim_lock", "Sticky Target Lock", false, { parent = "b_aim" })
+        menu.AddCheckbox(tab_main, "Aimbot", "b_aim_vis", "Visible Check", false, { parent = "b_aim" })
+        menu.AddCheckbox(tab_main, "Aimbot", "b_aim_team", "Team Check", false, { parent = "b_aim" })
 
-    local function draw_keybind(x, y, w, label, key, bind_id)
-        local cur_vk = get_val(key, 0x02) or 0x02
-        draw.Text(x, y + 2, label, theme_dim, 13)
+        menu.AddCheckbox(tab_main, "Aimbot", "b_aim_fov_draw", "Draw FOV Circle", false, { parent = "b_aim" })
+        menu.AddColorpicker(tab_main, "Aimbot", "b_aim_fov_c", "FOV Color", {1, 1, 1, 0.25}, { parent = "b_aim_fov_draw" })
+        menu.AddCheckbox(tab_main, "Aimbot", "b_aim_fov_filled", "Filled FOV Circle", false, { parent = "b_aim_fov_draw" })
 
-        local btn_w = 90
-        local btn_h = 20
-        local bx = x + w - btn_w
-        local by = y
+        setup_toggle("b_aim", {
+            "b_aim_bone", "b_aim_key", "b_aim_mode", "b_aim_fov",
+            "b_aim_smooth", "b_aim_pred", "b_aim_lead", "b_aim_lock",
+            "b_aim_vis", "b_aim_team", "b_aim_fov_draw"
+        })
+        setup_toggle("b_aim_fov_draw", { "b_aim_fov_c", "b_aim_fov_filled" })
+    end)
 
-        local is_binding = (ui.active_bind == bind_id)
-        local btn_text = is_binding and "Press..." or ("[ " .. get_vk_name(cur_vk) .. " ]")
+    -- Group 2: Silent Aim
+    pcall(function()
+        menu.AddGroup(tab_sil, "Silent Aim")
+        menu.AddCheckbox(tab_sil, "Silent Aim", "b_silent", "Enable Silent Aim", false)
+        menu.AddHotkey(tab_sil, "Silent Aim", "b_silent_key", "Silent Key (0=Always)", 0, { parent = "b_silent" })
+        menu.AddCombo(tab_sil, "Silent Aim", "b_silent_mode", "Silent Mode", {"Always", "Hold", "Toggle"}, 0, { parent = "b_silent" })
+        menu.AddSliderInt(tab_sil, "Silent Aim", "b_silent_hchance", "Hit Chance %", 1, 100, 100, "%d%%", { parent = "b_silent" })
+        menu.AddSliderInt(tab_sil, "Silent Aim", "b_silent_fov", "Silent FOV", 1, 360, 60, "%d°", { parent = "b_silent" })
+        menu.AddCombo(tab_sil, "Silent Aim", "b_silent_bone", "Silent Bone", {"Head", "Chest", "Torso", "Random"}, 0, { parent = "b_silent" })
+        menu.AddCheckbox(tab_sil, "Silent Aim", "b_silent_multipoint", "Multi-Point (Bone Fallback)", false, { parent = "b_silent" })
+        menu.AddCheckbox(tab_sil, "Silent Aim", "b_silent_vis", "Visible Check", false, { parent = "b_silent" })
+        menu.AddCheckbox(tab_sil, "Silent Aim", "b_silent_team", "Team Check", false, { parent = "b_silent" })
 
-        local is_hov = mx >= bx and mx <= bx + btn_w and my >= by and my <= by + btn_h
-        local bg_col = (is_hov or is_binding) and {0.08, 0.08, 0.11, 1.0} or {0.04, 0.04, 0.05, 1.0}
+        menu.AddCheckbox(tab_sil, "Silent Aim", "b_silent_fov_draw", "Draw Silent FOV", false, { parent = "b_silent" })
+        menu.AddColorpicker(tab_sil, "Silent Aim", "b_silent_fov_c", "Silent FOV Color", {1, 0.8, 0.2, 0.2}, { parent = "b_silent_fov_draw" })
+        menu.AddCheckbox(tab_sil, "Silent Aim", "b_silent_fov_filled", "Filled FOV Circle", false, { parent = "b_silent_fov_draw" })
 
-        draw.RectFilled(bx, by, btn_w, btn_h, bg_col, 0)
-        draw.Rect(bx, by, btn_w, btn_h, (is_hov or is_binding) and theme_col or {0.02, 0.02, 0.02, 1.0}, 0, 1.0)
+        setup_toggle("b_silent", {
+            "b_silent_key", "b_silent_mode", "b_silent_hchance", "b_silent_fov",
+            "b_silent_bone", "b_silent_multipoint", "b_silent_vis", "b_silent_team",
+            "b_silent_fov_draw"
+        })
+        setup_toggle("b_silent_fov_draw", { "b_silent_fov_c", "b_silent_fov_filled" })
+    end)
 
-        local tw, _ = draw.GetTextSize(btn_text, 12)
-        tw = (type(tw) == "number" and tw) or (#btn_text * 6.5)
-        local tx = bx + math.floor((btn_w - tw) / 2)
-        draw.Text(tx, by + 3, btn_text, (is_hov or is_binding) and theme_col or theme_sub, 12)
+    -- Group 3: Player ESP
+    pcall(function()
+        menu.AddGroup(tab_esp, "Player ESP")
+        menu.AddCheckbox(tab_esp, "Player ESP", "b_esp", "Enable Player ESP", false)
 
-        if is_click and is_hov then
-            if ui.active_bind == bind_id then
-                ui.active_bind = nil
-                ui.bind_armed = false
+        menu.AddCheckbox(tab_esp, "Player ESP", "b_esp_box", "Bounding Box", false, { parent = "b_esp" })
+        menu.AddCombo(tab_esp, "Player ESP", "b_esp_style", "Box Style", {"Full Box", "Corner Box"}, 0, { parent = "b_esp_box" })
+        menu.AddColorpicker(tab_esp, "Player ESP", "b_esp_box_c", "Box Color", {1, 1, 1, 1}, { parent = "b_esp_box" })
+
+        menu.AddCheckbox(tab_esp, "Player ESP", "b_esp_skel", "Skeleton ESP", false, { parent = "b_esp" })
+        menu.AddColorpicker(tab_esp, "Player ESP", "b_esp_skel_c", "Skeleton Color", {1, 1, 1, 0.8}, { parent = "b_esp_skel" })
+
+        menu.AddCheckbox(tab_esp, "Player ESP", "b_esp_hp", "Health Bar", false, { parent = "b_esp" })
+        menu.AddCheckbox(tab_esp, "Player ESP", "b_esp_hp_txt", "Health Text", false, { parent = "b_esp_hp" })
+        menu.AddColorpicker(tab_esp, "Player ESP", "b_esp_hp_c", "Health Color", {0.2, 1, 0.2, 1}, { parent = "b_esp_hp" })
+
+        menu.AddCheckbox(tab_esp, "Player ESP", "b_esp_name", "Player Name", false, { parent = "b_esp" })
+        menu.AddColorpicker(tab_esp, "Player ESP", "b_esp_name_c", "Name Color", {1, 1, 1, 1}, { parent = "b_esp_name" })
+
+        menu.AddCheckbox(tab_esp, "Player ESP", "b_esp_dist", "Distance", false, { parent = "b_esp" })
+        menu.AddColorpicker(tab_esp, "Player ESP", "b_esp_dist_c", "Distance Color", {0.7, 0.7, 0.7, 1}, { parent = "b_esp_dist" })
+
+        menu.AddCheckbox(tab_esp, "Player ESP", "b_esp_weapon", "Equipped Weapon", false, { parent = "b_esp" })
+        menu.AddColorpicker(tab_esp, "Player ESP", "b_esp_weapon_c", "Weapon Color", {1, 0.7, 0.3, 1}, { parent = "b_esp_weapon" })
+
+        menu.AddCheckbox(tab_esp, "Player ESP", "b_esp_armor", "Helmet & Armor", false, { parent = "b_esp" })
+        menu.AddColorpicker(tab_esp, "Player ESP", "b_esp_armor_c", "Armor Color", {0.6, 0.85, 1, 1}, { parent = "b_esp_armor" })
+
+        menu.AddCheckbox(tab_esp, "Player ESP", "b_esp_snap", "Snaplines", false, { parent = "b_esp" })
+        menu.AddColorpicker(tab_esp, "Player ESP", "b_esp_snap_c", "Snapline Color", {1, 1, 1, 0.5}, { parent = "b_esp_snap" })
+
+        menu.AddSliderInt(tab_esp, "Player ESP", "b_esp_range", "Max Range (m)", 10, 1000, 300, "%dm", { parent = "b_esp" })
+        menu.AddCheckbox(tab_esp, "Player ESP", "b_esp_team", "Team Filter", false, { parent = "b_esp" })
+
+        menu.AddCheckbox(tab_esp, "Player ESP", "b_esp_vis_tag", "Visible Tag", false, { parent = "b_esp" })
+        menu.AddColorpicker(tab_esp, "Player ESP", "b_esp_vis_tag_c", "Visible Tag Color", {0.15, 1, 0.25, 1}, { parent = "b_esp_vis_tag" })
+
+        menu.AddCheckbox(tab_esp, "Player ESP", "b_esp_staff", "Staff Detect Warning", false, { parent = "b_esp" })
+        menu.AddColorpicker(tab_esp, "Player ESP", "b_esp_staff_c", "Staff Color", {1, 0.2, 0.2, 1}, { parent = "b_esp_staff" })
+
+        menu.AddCheckbox(tab_esp, "Player ESP", "b_esp_hvt", "High Value Target Tag", false, { parent = "b_esp" })
+        menu.AddColorpicker(tab_esp, "Player ESP", "b_esp_hvt_c", "High Value Target Color", {1, 0.85, 0.2, 1}, { parent = "b_esp_hvt" })
+
+        menu.AddCheckbox(tab_esp, "Player ESP", "b_cheater_finder", "Cheater Detector", false, { parent = "b_esp" })
+        menu.AddCheckbox(tab_esp, "Player ESP", "b_cheater_panel", "Cheaters Alert Panel", false, { parent = "b_cheater_finder" })
+
+        setup_toggle("b_esp", {
+            "b_esp_box", "b_esp_skel", "b_esp_hp", "b_esp_name", "b_esp_dist",
+            "b_esp_weapon", "b_esp_armor", "b_esp_snap", "b_esp_range",
+            "b_esp_team", "b_esp_vis_tag", "b_esp_staff", "b_esp_hvt", "b_cheater_finder"
+        })
+        setup_toggle("b_esp_box", { "b_esp_style", "b_esp_box_c" })
+        setup_toggle("b_esp_skel", { "b_esp_skel_c" })
+        setup_toggle("b_esp_hp", { "b_esp_hp_txt", "b_esp_hp_c" })
+        setup_toggle("b_esp_name", { "b_esp_name_c" })
+        setup_toggle("b_esp_dist", { "b_esp_dist_c" })
+        setup_toggle("b_esp_weapon", { "b_esp_weapon_c" })
+        setup_toggle("b_esp_armor", { "b_esp_armor_c" })
+        setup_toggle("b_esp_snap", { "b_esp_snap_c" })
+        setup_toggle("b_esp_vis_tag", { "b_esp_vis_tag_c" })
+        setup_toggle("b_esp_staff", { "b_esp_staff_c" })
+        setup_toggle("b_esp_hvt", { "b_esp_hvt_c" })
+        setup_toggle("b_cheater_finder", { "b_cheater_panel" })
+    end)
+
+    -- Group 4: Chams
+    pcall(function()
+        menu.AddGroup(tab_chm, "Chams")
+        menu.AddCheckbox(tab_chm, "Chams", "b_chams", "Enable Player Chams", false)
+        menu.AddCombo(tab_chm, "Chams", "b_chams_mode", "Chams Mode", {"Solid", "Wireframe", "Glow"}, 0, { parent = "b_chams" })
+        menu.AddCheckbox(tab_chm, "Chams", "b_chams_vc", "Visible Only (Vis Check)", false, { parent = "b_chams" })
+        menu.AddColorpicker(tab_chm, "Chams", "b_chams_vis", "Visible Color", {0, 1, 0, 0.8}, { parent = "b_chams" })
+        menu.AddColorpicker(tab_chm, "Chams", "b_chams_occ", "Occluded Color", {1, 0, 0, 0.8}, { parent = "b_chams" })
+
+        setup_toggle("b_chams", { "b_chams_mode", "b_chams_vc", "b_chams_vis", "b_chams_occ" })
+    end)
+
+    -- Group 5: NPCs
+    pcall(function()
+        menu.AddGroup(tab_npc, "NPCs")
+        menu.AddCheckbox(tab_npc, "NPCs", "b_npc", "Enable NPC ESP", false)
+
+        menu.AddCheckbox(tab_npc, "NPCs", "b_npc_box", "NPC Box", false, { parent = "b_npc" })
+        menu.AddColorpicker(tab_npc, "NPCs", "b_npc_box_c", "NPC Box Color", {1, 0.5, 0.2, 1}, { parent = "b_npc_box" })
+
+        menu.AddCheckbox(tab_npc, "NPCs", "b_npc_skel", "NPC Skeleton", false, { parent = "b_npc" })
+        menu.AddColorpicker(tab_npc, "NPCs", "b_npc_skel_c", "NPC Skeleton Color", {1, 0.6, 0.3, 0.8}, { parent = "b_npc_skel" })
+
+        menu.AddCheckbox(tab_npc, "NPCs", "b_npc_hp", "NPC Health Bar", false, { parent = "b_npc" })
+        menu.AddColorpicker(tab_npc, "NPCs", "b_npc_hp_c", "NPC Health Color", {0.2, 1, 0.2, 1}, { parent = "b_npc_hp" })
+
+        menu.AddCheckbox(tab_npc, "NPCs", "b_npc_name", "NPC Name", false, { parent = "b_npc" })
+        menu.AddColorpicker(tab_npc, "NPCs", "b_npc_name_c", "NPC Name Color", {1, 0.8, 0.4, 1}, { parent = "b_npc_name" })
+
+        menu.AddCheckbox(tab_npc, "NPCs", "b_npc_dist", "NPC Distance", false, { parent = "b_npc" })
+        menu.AddColorpicker(tab_npc, "NPCs", "b_npc_dist_c", "NPC Distance Color", {0.7, 0.7, 0.7, 1}, { parent = "b_npc_dist" })
+
+        menu.AddSliderInt(tab_npc, "NPCs", "b_npc_range", "NPC Range (m)", 10, 600, 200, "%dm", { parent = "b_npc" })
+        menu.AddCheckbox(tab_npc, "NPCs", "b_boss", "Boss Tracker Panel", false, { parent = "b_npc" })
+
+        setup_toggle("b_npc", {
+            "b_npc_box", "b_npc_skel", "b_npc_hp", "b_npc_name", "b_npc_dist", "b_npc_range", "b_boss"
+        })
+        setup_toggle("b_npc_box", { "b_npc_box_c" })
+        setup_toggle("b_npc_skel", { "b_npc_skel_c" })
+        setup_toggle("b_npc_hp", { "b_npc_hp_c" })
+        setup_toggle("b_npc_name", { "b_npc_name_c" })
+        setup_toggle("b_npc_dist", { "b_npc_dist_c" })
+    end)
+
+    -- Group 6: World ESP
+    pcall(function()
+        menu.AddGroup(tab_wld, "World ESP")
+        menu.AddCheckbox(tab_wld, "World ESP", "b_cont", "Enable Container ESP", false)
+        menu.AddColorpicker(tab_wld, "World ESP", "b_cont_c", "Container Color", {0.2, 0.8, 1, 1}, { parent = "b_cont" })
+        menu.AddCheckbox(tab_wld, "World ESP", "b_cont_items", "Show Items Inside", false, { parent = "b_cont" })
+        menu.AddColorpicker(tab_wld, "World ESP", "b_cont_items_c", "Container Items Color", {0.85, 0.85, 0.85, 1}, { parent = "b_cont_items" })
+        menu.AddCombo(tab_wld, "World ESP", "b_cont_filter", "Container Filter", {"All Containers", "Only OP Loot Containers"}, 0, { parent = "b_cont" })
+        menu.AddSliderInt(tab_wld, "World ESP", "b_cont_range", "Container Range (m)", 10, 500, 150, "%dm", { parent = "b_cont" })
+
+        menu.AddCheckbox(tab_wld, "World ESP", "b_loot", "Dropped Items ESP", false)
+        menu.AddColorpicker(tab_wld, "World ESP", "b_loot_c", "Dropped Items Color", {0.4, 1, 0.4, 1}, { parent = "b_loot" })
+        menu.AddSliderInt(tab_wld, "World ESP", "b_loot_range", "Dropped Items Range (m)", 10, 500, 150, "%dm", { parent = "b_loot" })
+
+        menu.AddCheckbox(tab_wld, "World ESP", "b_corpse", "Enable Corpse ESP", false)
+        menu.AddColorpicker(tab_wld, "World ESP", "b_corpse_c", "Corpse Color", {0.8, 0.2, 0.2, 1}, { parent = "b_corpse" })
+        menu.AddCheckbox(tab_wld, "World ESP", "b_corpse_x", "Corpse Marker", false, { parent = "b_corpse" })
+        menu.AddCheckbox(tab_wld, "World ESP", "b_corpse_items", "Show Corpse Items", false, { parent = "b_corpse" })
+        menu.AddColorpicker(tab_wld, "World ESP", "b_corpse_items_c", "Corpse Items Color", {0.85, 0.85, 0.85, 1}, { parent = "b_corpse_items" })
+        menu.AddSliderInt(tab_wld, "World ESP", "b_corpse_r", "Corpse Range (m)", 10, 500, 200, "%dm", { parent = "b_corpse" })
+
+        menu.AddCheckbox(tab_wld, "World ESP", "b_quest", "Quest Items ESP", false)
+        menu.AddColorpicker(tab_wld, "World ESP", "b_quest_c", "Quest Color", {1, 0.85, 0.2, 1}, { parent = "b_quest" })
+        menu.AddSliderInt(tab_wld, "World ESP", "b_quest_range", "Quest Range (m)", 10, 1000, 300, "%dm", { parent = "b_quest" })
+
+        menu.AddCheckbox(tab_wld, "World ESP", "b_extract", "Extraction Points", false)
+        menu.AddColorpicker(tab_wld, "World ESP", "b_extract_c", "Extract Color", {0.2, 1, 0.5, 1}, { parent = "b_extract" })
+        menu.AddSliderInt(tab_wld, "World ESP", "b_extract_range", "Extraction Range (m)", 10, 4000, 3000, "%dm", { parent = "b_extract" })
+
+        menu.AddCheckbox(tab_wld, "World ESP", "b_hazard", "Hazard Zones", false)
+        menu.AddColorpicker(tab_wld, "World ESP", "b_hazard_c", "Hazard Color", {1, 0.3, 0.1, 1}, { parent = "b_hazard" })
+        menu.AddSliderInt(tab_wld, "World ESP", "b_hazard_range", "Hazard Range (m)", 10, 2000, 500, "%dm", { parent = "b_hazard" })
+
+        menu.AddCheckbox(tab_wld, "World ESP", "b_claymore", "Claymore ESP", false)
+        menu.AddColorpicker(tab_wld, "World ESP", "b_claymore_c", "Claymore Color", {1, 0.2, 0.2, 1}, { parent = "b_claymore" })
+
+        menu.AddCheckbox(tab_wld, "World ESP", "b_car", "Car ESP", false)
+        menu.AddColorpicker(tab_wld, "World ESP", "b_car_c", "Car Color", {0.2, 0.6, 1, 1}, { parent = "b_car" })
+
+        setup_toggle("b_cont", { "b_cont_c", "b_cont_items", "b_cont_filter", "b_cont_range" }, function(on)
+            if on and scan_containers then pcall(scan_containers) end
+        end)
+        setup_toggle("b_cont_items", { "b_cont_items_c" })
+        setup_toggle("b_loot", { "b_loot_c", "b_loot_range" }, function(on)
+            if on and scan_world_items then pcall(scan_world_items) end
+        end)
+        setup_toggle("b_corpse", { "b_corpse_c", "b_corpse_x", "b_corpse_items", "b_corpse_r" })
+        setup_toggle("b_corpse_items", { "b_corpse_items_c" })
+        setup_toggle("b_quest", { "b_quest_c", "b_quest_range" }, function(on)
+            if on and scan_quests then pcall(scan_quests) end
+        end)
+        setup_toggle("b_extract", { "b_extract_c", "b_extract_range" }, function(on)
+            if on and scan_extracts then pcall(scan_extracts) end
+        end)
+        setup_toggle("b_hazard", { "b_hazard_c", "b_hazard_range" })
+        setup_toggle("b_claymore", { "b_claymore_c" })
+        setup_toggle("b_car", { "b_car_c" })
+    end)
+
+    -- Group 7: Combat Mods
+    pcall(function()
+        menu.AddGroup(tab_cbt, "Combat Mods")
+        menu.AddCheckbox(tab_cbt, "Combat Mods", "b_no_recoil", "No Recoil", false)
+        menu.AddSliderInt(tab_cbt, "Combat Mods", "b_recoil_reduc", "Recoil Reduction %", 0, 100, 70, "%d%%", { parent = "b_no_recoil" })
+
+        menu.AddCheckbox(tab_cbt, "Combat Mods", "b_hitmarker", "Hitmarker", false)
+        menu.AddColorpicker(tab_cbt, "Combat Mods", "b_hitmarker_c", "Hitmarker Color", {1, 1, 1, 1}, { parent = "b_hitmarker" })
+
+        menu.AddCheckbox(tab_cbt, "Combat Mods", "b_hit_logs", "Hit / Damage Logs", false)
+        menu.AddColorpicker(tab_cbt, "Combat Mods", "b_hit_logs_c", "Hit Logs Color", {0.25, 0.65, 1.0, 1.0}, { parent = "b_hit_logs" })
+        menu.AddSliderInt(tab_cbt, "Combat Mods", "b_hit_log_duration", "Log Duration (s)", 1, 10, 4, "%ds", { parent = "b_hit_logs" })
+
+        menu.AddCheckbox(tab_cbt, "Combat Mods", "b_bullet_tracers", "Bullet Tracers", false)
+        menu.AddColorpicker(tab_cbt, "Combat Mods", "b_bullet_tracer_c", "Tracer Color", {1, 0.8, 0, 0.8}, { parent = "b_bullet_tracers" })
+
+        menu.AddCheckbox(tab_cbt, "Combat Mods", "b_cross", "Custom Crosshair", false)
+        menu.AddCombo(tab_cbt, "Combat Mods", "b_cross_style", "Crosshair Style", {"Classic Cross", "Center Dot", "Circle Outline", "T-Shape Cross", "Arrow / Chevron", "Circle + Cross"}, 0, { parent = "b_cross" })
+        menu.AddColorpicker(tab_cbt, "Combat Mods", "b_cross_c", "Crosshair Color", {0, 1, 0, 1}, { parent = "b_cross" })
+        menu.AddSliderInt(tab_cbt, "Combat Mods", "b_cross_sz", "Crosshair Size", 2, 30, 8, "%d", { parent = "b_cross" })
+        menu.AddSliderInt(tab_cbt, "Combat Mods", "b_cross_gap", "Crosshair Gap", 0, 20, 3, "%d", { parent = "b_cross" })
+        menu.AddSliderInt(tab_cbt, "Combat Mods", "b_cross_thick", "Crosshair Thickness", 1, 6, 2, "%d", { parent = "b_cross" })
+
+        menu.AddCheckbox(tab_cbt, "Combat Mods", "b_cross_spin", "Spin Animation", false, { parent = "b_cross" })
+        menu.AddSliderInt(tab_cbt, "Combat Mods", "b_cross_spin_spd", "Spin Speed", 1, 20, 5, "%d", { parent = "b_cross_spin" })
+
+        menu.AddCheckbox(tab_cbt, "Combat Mods", "b_cross_pulse", "Pulse Animation", false, { parent = "b_cross" })
+        menu.AddSliderInt(tab_cbt, "Combat Mods", "b_cross_pulse_spd", "Pulse Speed", 1, 20, 4, "%d", { parent = "b_cross_pulse" })
+
+        setup_toggle("b_no_recoil", { "b_recoil_reduc" })
+        setup_toggle("b_hitmarker", { "b_hitmarker_c" })
+        setup_toggle("b_hit_logs", { "b_hit_logs_c", "b_hit_log_duration" })
+        setup_toggle("b_bullet_tracers", { "b_bullet_tracer_c" })
+        setup_toggle("b_cross", {
+            "b_cross_style", "b_cross_c", "b_cross_sz", "b_cross_gap", "b_cross_thick",
+            "b_cross_spin", "b_cross_pulse"
+        })
+        setup_toggle("b_cross_spin", { "b_cross_spin_spd" })
+        setup_toggle("b_cross_pulse", { "b_cross_pulse_spd" })
+
+        if menu.SetCallback then
+            menu.SetCallback("b_cross_style", function(v) cfg.cross_style = v; if boba_store then boba_store.b_cross_style = v end end)
+            menu.SetCallback("b_cross_sz", function(v) cfg.cross_sz = v; if boba_store then boba_store.b_cross_sz = v end end)
+            menu.SetCallback("b_cross_gap", function(v) cfg.cross_gap = v; if boba_store then boba_store.b_cross_gap = v end end)
+            menu.SetCallback("b_cross_thick", function(v) cfg.cross_thick = v; if boba_store then boba_store.b_cross_thick = v end end)
+        end
+    end)
+
+    -- Group 8: Config
+    pcall(function()
+        menu.AddGroup(tab_cfg, "Config")
+        local cfg_list = read_config_list()
+        if not cfg_list or #cfg_list == 0 then cfg_list = {"default"} end
+        menu.AddCombo(tab_cfg, "Config", "b_cfg_selected", "Saved Configs", cfg_list, 0)
+        menu.AddInput(tab_cfg, "Config", "b_cfg_name", "New Config Name", "default")
+        menu.AddButton(tab_cfg, "Config", "b_btn_load", "Load Selected Config", function()
+            local cfg_items = read_config_list()
+            local sel_idx = menu.Get("b_cfg_selected") or 0
+            local cfg_name = (cfg_items and cfg_items[sel_idx + 1]) or "default"
+            pcall(load_config, cfg_name)
+            notify.Success("BOBA", "Loaded config: " .. tostring(cfg_name))
+        end)
+        menu.AddButton(tab_cfg, "Config", "b_btn_save", "Save Config", function()
+            local nm = menu.Get("b_cfg_name")
+            if not nm or nm:match("^%s*$") then
+                local sel_idx = menu.Get("b_cfg_selected") or 0
+                local cfg_items = read_config_list()
+                nm = (cfg_items and cfg_items[sel_idx + 1]) or "default"
             else
-                ui.active_bind = bind_id
-                ui.bind_armed = false
+                nm = nm:match("^%s*(.-)%s*$")
             end
-        end
-    end
-
-    local function draw_cycle(x, y, w, label, key, options, callback)
-        local cur_idx = get_val(key, 0)
-        if type(cur_idx) ~= "number" then cur_idx = 0 end
-        if cur_idx < 0 or cur_idx >= #options then cur_idx = 0 end
-        local opt_text = options[cur_idx + 1] or options[1] or "Head"
-
-        draw.Text(x, y + 2, label, theme_dim, 13)
-
-        local btn_w = 90
-        local btn_h = 20
-        local bx = x + w - btn_w
-        local by = y
-
-        local is_hov = mx >= x and mx <= x + w and my >= by - 2 and my <= by + btn_h + 4
-        local bg_col = is_hov and {0.08, 0.08, 0.11, 1.0} or {0.04, 0.04, 0.05, 1.0}
-
-        draw.RectFilled(bx, by, btn_w, btn_h, bg_col, 0)
-        draw.Rect(bx, by, btn_w, btn_h, is_hov and theme_col or {0.02, 0.02, 0.02, 1.0}, 0, 1.0)
-
-        local tw, _ = draw.GetTextSize(opt_text, 12)
-        tw = (type(tw) == "number" and tw) or (#opt_text * 6.5)
-        local tx = bx + math.floor((btn_w - tw) / 2)
-        draw.Text(tx, by + 3, opt_text, is_hov and theme_col or theme_sub, 12)
-
-        if is_click and is_hov then
-            local next_idx = (cur_idx + 1) % #options
-            set_val(key, next_idx)
-            if callback then callback(next_idx) end
-        end
-    end
-
-local function draw_checkbox(x, y, label, key)
-        local box_sz = 16
-        local hov = mx >= x - 6 and mx <= x + 230 and my >= y - 4 and my <= y + box_sz + 6
-
-        local is_on = (get_val(key, false) == true)
-        if is_click and hov then
-            is_on = not is_on
-            set_val(key, is_on)
-        end
-
-        draw.RectFilled(x, y + 2, box_sz, box_sz, {0.04, 0.04, 0.05, 1.0}, 0)
-        draw.Rect(x, y + 2, box_sz, box_sz, hov and theme_col or {0.02, 0.02, 0.02, 1.0}, 0, 1.0)
-
-        if is_on then
-            draw.Line(x + 3, y + 10, x + 7, y + 14, theme_col, 1.5)
-            draw.Line(x + 7, y + 14, x + 13, y + 5, theme_col, 1.5)
-        end
-
-        draw.Text(x + 24, y + 2, label, is_on and theme_col or theme_dim, 13)
-    end
-
-    local function draw_slider(sid, x, y, w, label, key, min_val, max_val, fmt)
-        local cur_val = get_val(key, min_val)
-        if type(cur_val) ~= "number" then cur_val = min_val end
-        draw.Text(x, y, label, theme_dim, 13)
-
-        local val_str = string.format(fmt or "%.1f", cur_val)
-        local vw, _ = draw.GetTextSize(val_str, 13)
-        vw = (type(vw) == "number" and vw) or 30
-        draw.Text(x + w - vw, y, val_str, theme_sub, 13)
-
-        local trk_y = y + 18
-        local trk_h = 4
-        draw.RectFilled(x, trk_y, w, trk_h, {0.04, 0.04, 0.05, 1.0}, 0)
-        draw.Rect(x, trk_y, w, trk_h, {0.02, 0.02, 0.02, 1.0}, 0, 1.0)
-
-        local frac = math.max(0, math.min(1, (cur_val - min_val) / (max_val - min_val)))
-        local fill_w = math.max(0, w * frac)
-        if fill_w > 0 then
-            draw.RectFilled(x, trk_y, fill_w, trk_h, theme_col, 0)
-        end
-        draw.RectFilled(x + fill_w - 2, trk_y - 2, 4, 8, theme_sub, 0)
-        draw.Rect(x + fill_w - 2, trk_y - 2, 4, 8, {0.02, 0.02, 0.02, 1.0}, 0, 1.0)
-
-        local s_hov = mx >= x - 2 and mx <= x + w + 2 and my >= trk_y - 4 and my <= trk_y + 10
-        if is_click and s_hov then
-            ui.active_slider = sid
-        end
-
-        if ui.active_slider == sid then
-            if lmb then
-                local n_frac = math.max(0, math.min(1, (mx - x) / w))
-                local step = min_val + n_frac * (max_val - min_val)
-                local nv = step
-                if fmt and fmt:find("d") then
-                    nv = math.floor(step + 0.5)
-                else
-                    nv = math.floor(step * 10 + 0.5) / 10
-                end
-                set_val(key, nv)
-            else
-                ui.active_slider = nil
+            pcall(save_config, nm)
+            local updated_list = read_config_list()
+            local sel_idx = 0
+            for idx, v in ipairs(updated_list) do
+                if v == nm then sel_idx = idx - 1; break end
             end
-        end
-    end
-
-    local function draw_button(x, y, w, h, label, callback)
-        local hov = mx >= x and mx <= x + w and my >= y and my <= y + h
-        local bg = hov and {0.14, 0.15, 0.18, 0.9} or {0.06, 0.06, 0.08, 0.85}
-        draw.RectFilled(x, y, w, h, bg, 0)
-        draw.Rect(x, y, w, h, hov and theme_col or {0.02, 0.02, 0.02, 1.0}, 0, 1.0)
-
-        local lw, _ = draw.GetTextSize(label, 13)
-        lw = (type(lw) == "number" and lw) or 60
-        local lx = x + math.floor((w - lw) / 2)
-        draw.Text(lx, y + 4, label, hov and theme_col or theme_sub, 13)
-
-        if is_click and hov then
-            callback()
-        end
-    end
-
-    local function draw_color_palette(x, y, w, color_id, callback)
-        local cur_c = mc(color_id)
-        local btn_w = math.floor((w - 16) / 5)
-        local btn_h = 16
-        for i, p in ipairs(ui.PALETTE) do
-            local col_idx = (i - 1) % 5
-            local row_idx = math.floor((i - 1) / 5)
-            local bx = x + col_idx * (btn_w + 4)
-            local by = y + row_idx * 19
-            local hov = mx >= bx and mx <= bx + btn_w and my >= by and my <= by + btn_h
-            local is_sel = false
-            if cur_c and p.col then
-                local dr = math.abs((cur_c[1] or 0) - p.col[1])
-                local dg = math.abs((cur_c[2] or 0) - p.col[2])
-                local db = math.abs((cur_c[3] or 0) - p.col[3])
-                if dr < 0.1 and dg < 0.1 and db < 0.1 then
-                    is_sel = true
-                end
-            end
-
-            draw.RectFilled(bx, by, btn_w, btn_h, p.col, 0)
-            if is_sel then
-                draw.Rect(bx - 1, by - 1, btn_w + 2, btn_h + 2, {1.0, 1.0, 1.0, 1.0}, 0, 1.5)
-            elseif hov then
-                draw.Rect(bx, by, btn_w, btn_h, {0.9, 0.9, 0.9, 0.8}, 0, 1.0)
-            else
-                draw.Rect(bx, by, btn_w, btn_h, {0.02, 0.02, 0.02, 1.0}, 0, 1.0)
-            end
-
-            if is_click and hov then
-                pcall(function() menu.SetColor(color_id, p.col) end)
-                if callback then callback(p.col) end
-            end
-        end
-    end
-
-    if ui.tab == 0 then
-        local col1_x = px + 78
-        draw_card(col1_x, py + 30, 236, 481, "Player Aimbot")
-        draw_checkbox(col1_x + 12, py + 56, "Enable Aimbot", "b_aim")
-        draw_keybind(col1_x + 12, py + 80, 212, "Aim Key", "b_aim_key", "aim_key")
-        draw_cycle(col1_x + 12, py + 104, 212, "Target Bone", "b_aim_bone", {"Head", "Chest", "Pelvis", "Closest"})
-        draw_slider("s_aim_fov", col1_x + 12, py + 128, 212, "FOV", "b_aim_fov", 30, 800, "%d deg")
-        draw_slider("s_aim_sm", col1_x + 12, py + 166, 212, "Smooth", "b_aim_smooth", 1.0, 20.0, "%.1f")
-        draw_checkbox(col1_x + 12, py + 204, "Bullet Drop Prediction", "b_aim_pred")
-        draw_checkbox(col1_x + 12, py + 228, "Velocity Lead", "b_aim_lead")
-        draw_checkbox(col1_x + 12, py + 252, "Sticky Target Lock", "b_aim_lock")
-        draw_checkbox(col1_x + 12, py + 276, "Team Check", "b_aim_team")
-        draw_checkbox(col1_x + 12, py + 302, "Draw FOV Circle", "b_aim_fov_draw")
-        draw_checkbox(col1_x + 12, py + 328, "Filled FOV Circle", "b_aim_fov_filled")
-        draw.Text(col1_x + 12, py + 356, "FOV Color:", theme_sub, 12)
-        draw_color_palette(col1_x + 12, py + 374, 212, "b_aim_fov", function(c)
-            cfg.aim_fov_c = c
+            pcall(menu.AddCombo, tab_cfg, "Config", "b_cfg_selected", "Saved Configs", updated_list, sel_idx)
+            pcall(menu.Set, "b_cfg_selected", sel_idx)
+            notify.Success("BOBA", "Saved config: " .. tostring(nm))
         end)
+    end)
 
-        local col2_x = px + 322
-        draw_card(col2_x, py + 30, 236, 481, ui.tab0_mode == 1 and "Combat Visuals" or "Silent Aimbot")
+    -- ==========================================
+    -- TAB 2: INVENTORY (HUD & Checker) - updated
+    -- ==========================================
+    pcall(function()
+        menu.AddGroup(tab_inv, "Inventory HUD")
+        menu.AddCheckbox(tab_inv, "Inventory HUD", "b_loadout_esp", "Enable Inventory HUD", false)
+        menu.AddColorpicker(tab_inv, "Inventory HUD", "b_loadout_c", "HUD Color", {0.4, 0.8, 1, 1}, { parent = "b_loadout_esp" })
 
-        local sub_btn_w = 104
-        draw_button(col2_x + 10, py + 56, sub_btn_w, 20, "Silent Aim", function()
-            ui.tab0_mode = 0
-        end)
-        draw_button(col2_x + 122, py + 56, sub_btn_w, 20, "Combat Vis", function()
-            ui.tab0_mode = 1
-        end)
+        setup_toggle("b_loadout_esp", { "b_loadout_c" })
 
-        if ui.tab0_mode ~= 1 then
-            draw_checkbox(col2_x + 12, py + 84, "Enable Silent Aim", "b_silent")
-            draw_cycle(col2_x + 12, py + 110, 212, "Silent Bone", "b_silent_bone", {"Head", "Chest", "Pelvis", "Random"})
-            draw_slider("s_sil_fov", col2_x + 12, py + 136, 212, "Silent FOV", "b_silent_fov", 30, 500, "%d deg")
-            draw_checkbox(col2_x + 12, py + 174, "Multi-Point (Bone Fallback)", "b_silent_multipoint")
-            draw_checkbox(col2_x + 12, py + 200, "Team Check", "b_silent_team")
-            draw_checkbox(col2_x + 12, py + 226, "Draw Silent FOV", "b_silent_fov_draw")
-            draw_checkbox(col2_x + 12, py + 250, "Filled FOV Circle", "b_silent_fov_filled")
-            draw.Text(col2_x + 12, py + 276, "Silent FOV Color:", theme_sub, 12)
-            draw_color_palette(col2_x + 12, py + 294, 212, "b_silent_fov", function(c)
-                cfg.sil_fov_c = c
-            end)
-            draw_checkbox(col2_x + 12, py + 348, "No Recoil", "b_no_recoil")
-            draw_slider("s_recoil_reduc", col2_x + 12, py + 374, 212, "Recoil Reduction", "b_recoil_reduc", 0, 100, "%d %%")
-        else
-            draw_checkbox(col2_x + 12, py + 86, "Bullet Tracers", "b_bullet_tracers")
-            draw_slider("s_tracer_dur", col2_x + 12, py + 112, 212, "Tracer Duration", "b_tracer_duration", 0.2, 5.0, "%.1f s")
-            draw.Text(col2_x + 12, py + 152, "Tracer Color:", theme_sub, 12)
-            draw_color_palette(col2_x + 12, py + 168, 212, "b_bullet_tracers", function(c)
-                cfg.tracer_c = c
-            end)
-            draw_checkbox(col2_x + 12, py + 224, "Hit Markers", "b_hitmarker")
-            draw_checkbox(col2_x + 12, py + 250, "Hit Logs", "b_hit_logs")
-            draw_slider("s_hit_dur", col2_x + 12, py + 276, 212, "Hit Log Duration", "b_hit_log_duration", 1.0, 10.0, "%.1f s")
-        end
+        menu.AddGroup(tab_inv, "Inventory Checker")
+        menu.AddCheckbox(tab_inv, "Inventory Checker", "b_inspect", "Enable Inventory Checker", false)
+        menu.AddColorpicker(tab_inv, "Inventory Checker", "b_inspect_c", "Checker Color", {0.4, 0.8, 1, 1}, { parent = "b_inspect" })
+        menu.AddCheckbox(tab_inv, "Inventory Checker", "b_inv_weap", "Show Weapons", false, { parent = "b_inspect" })
+        menu.AddCheckbox(tab_inv, "Inventory Checker", "b_inv_armor", "Show Armor", false, { parent = "b_inspect" })
+        menu.AddCheckbox(tab_inv, "Inventory Checker", "b_inv_special", "Show Special Items", false, { parent = "b_inspect" })
+        menu.AddCheckbox(tab_inv, "Inventory Checker", "b_inv_misc", "Show Misc Items", false, { parent = "b_inspect" })
 
-        local col3_x = px + 566
-        draw_card(col3_x, py + 30, 240, 481, "NPC Aimbot")
-        draw_checkbox(col3_x + 12, py + 56, "Enable NPC Aimbot", "b_npc_aim")
-        draw_keybind(col3_x + 12, py + 80, 216, "NPC Aim Key", "b_npc_aim_key", "npc_aim_key")
-        draw_cycle(col3_x + 12, py + 104, 216, "NPC Bone", "b_npc_aim_bone", {"Head", "Chest", "Pelvis"})
-        draw_slider("s_na_fov", col3_x + 12, py + 128, 216, "NPC FOV", "b_npc_aim_fov", 30, 500, "%d deg")
-        draw_slider("s_na_sm", col3_x + 12, py + 166, 216, "NPC Smooth", "b_npc_aim_smooth", 1.0, 20.0, "%.1f")
-        draw_checkbox(col3_x + 12, py + 204, "NPC Prediction", "b_npc_aim_pred")
-        draw_checkbox(col3_x + 12, py + 228, "Draw NPC FOV", "b_npc_aim_fov_draw")
-        draw_checkbox(col3_x + 12, py + 252, "Filled FOV Circle", "b_npc_aim_fov_filled")
-        draw.Text(col3_x + 12, py + 276, "NPC FOV Color:", theme_sub, 12)
-        draw_color_palette(col3_x + 12, py + 292, 216, "b_npc_aim_fov", function(c)
-            cfg.na_fov_c = c
-        end)
+        setup_toggle("b_inspect", {
+            "b_inspect_c", "b_inv_weap", "b_inv_armor", "b_inv_special", "b_inv_misc"
+        })
+    end)
 
-    elseif ui.tab == 1 then
-        local col1_x = px + 78
-        draw_card(col1_x, py + 30, 236, 481, "Player ESP")
-        draw_checkbox(col1_x + 12, py + 56, "Enable Player ESP", "b_esp")
-        draw_checkbox(col1_x + 12, py + 80, "Box ESP", "b_esp_box")
-        draw_checkbox(col1_x + 12, py + 104, "Skeleton ESP", "b_esp_skel")
-        draw_checkbox(col1_x + 12, py + 128, "Health Bar", "b_esp_hp")
-        draw_checkbox(col1_x + 12, py + 152, "Name ESP", "b_esp_name")
-        draw_checkbox(col1_x + 12, py + 176, "Distance ESP", "b_esp_dist")
-        draw_checkbox(col1_x + 12, py + 200, "Weapon ESP", "b_esp_weapon")
-        draw_checkbox(col1_x + 12, py + 224, "Snaplines", "b_esp_snap")
-        draw_checkbox(col1_x + 12, py + 248, "Player Loadout ESP", "b_loadout_esp")
-        draw_slider("s_loadout_sz", col1_x + 12, py + 272, 212, "Loadout Size (px)", "b_loadout_sz", 24, 56, "%d px")
-        draw_slider("s_esp_r", col1_x + 12, py + 306, 212, "Player Range (m)", "b_esp_range", 50, 5000, "%d m")
+    -- ==========================================
+    -- TAB 3: NPC AIMBOT
+    -- ==========================================
+    pcall(function()
+        menu.AddGroup(tab_na, "NPC Aimbot")
+        menu.AddCheckbox(tab_na, "NPC Aimbot", "b_npc_aim", "Enable NPC Aimbot", false)
+        menu.AddHotkey(tab_na, "NPC Aimbot", "b_npc_aim_key", "NPC Aim Key", 0x02, { parent = "b_npc_aim" })
+        menu.AddCombo(tab_na, "NPC Aimbot", "b_npc_aim_bone", "Target Bone", {"Head", "Chest", "Torso"}, 0, { parent = "b_npc_aim" })
+        menu.AddSliderInt(tab_na, "NPC Aimbot", "b_npc_aim_fov", "Aim FOV Radius", 1, 360, 90, "%d°", { parent = "b_npc_aim" })
+        menu.AddSliderFloat(tab_na, "NPC Aimbot", "b_npc_aim_smooth", "Aim Smoothness", 1.0, 30.0, 5.0, "%.1f", { parent = "b_npc_aim" })
+        menu.AddCheckbox(tab_na, "NPC Aimbot", "b_npc_aim_pred", "NPC Prediction", false, { parent = "b_npc_aim" })
 
-        draw.Text(col1_x + 12, py + 346, "Box Color:", theme_sub, 12)
-        draw_color_palette(col1_x + 12, py + 362, 212, "b_esp_box", nil)
-        draw.Text(col1_x + 12, py + 412, "Snapline Color:", theme_sub, 12)
-        draw_color_palette(col1_x + 12, py + 428, 212, "b_esp_snap", nil)
+        menu.AddCheckbox(tab_na, "NPC Aimbot", "b_npc_aim_fov_draw", "Draw FOV Circle", false, { parent = "b_npc_aim" })
+        menu.AddColorpicker(tab_na, "NPC Aimbot", "b_npc_aim_fov_c", "FOV Color", {1, 0.6, 0.2, 0.3}, { parent = "b_npc_aim_fov_draw" })
+        menu.AddCheckbox(tab_na, "NPC Aimbot", "b_npc_aim_fov_filled", "Filled FOV Circle", false, { parent = "b_npc_aim_fov_draw" })
 
-        local col2_x = px + 322
-        draw_card(col2_x, py + 30, 236, 481, "NPC & Extraction")
-        draw_checkbox(col2_x + 12, py + 60, "Enable NPC ESP", "b_npc")
-        draw_checkbox(col2_x + 12, py + 86, "NPC Box", "b_npc_box")
-        draw_checkbox(col2_x + 12, py + 112, "NPC Health", "b_npc_hp")
-        draw_checkbox(col2_x + 12, py + 138, "NPC Name", "b_npc_name")
-        draw_checkbox(col2_x + 12, py + 164, "NPC Skeleton", "b_npc_skel")
-        draw_slider("s_npc_r", col2_x + 12, py + 192, 212, "NPC Range (m)", "b_npc_range", 50, 2000, "%d m")
-        draw_checkbox(col2_x + 12, py + 232, "Extraction Points", "b_extract")
-        draw_slider("s_ext_r", col2_x + 12, py + 258, 212, "Extract Range (m)", "b_extract_range", 50, 4000, "%d m")
-        draw_checkbox(col2_x + 12, py + 298, "Hazard Zones", "b_hazard")
-        draw_slider("s_haz_r", col2_x + 12, py + 324, 212, "Hazard Range (m)", "b_hazard_range", 50, 2000, "%d m")
-
-        local col3_x = px + 566
-        draw_card(col3_x, py + 30, 240, 481, "Containers & World Loot")
-        draw_checkbox(col3_x + 12, py + 60, "Containers ESP", "b_cont")
-        draw_checkbox(col3_x + 12, py + 86, "Show Container Items", "b_cont_items")
-        draw_cycle(col3_x + 12, py + 112, 216, "Container Loot", "b_cont_filter", {"All Content", "OP Loot Only"})
-        draw_slider("s_cont_r", col3_x + 12, py + 140, 216, "Container Range", "b_cont_range", 10, 500, "%d m")
-        draw_checkbox(col3_x + 12, py + 180, "World Loot ESP", "b_loot")
-        draw_slider("s_loot_r", col3_x + 12, py + 206, 216, "Loot Range", "b_loot_range", 10, 500, "%d m")
-        draw_checkbox(col3_x + 12, py + 246, "Corpses ESP", "b_corpse")
-        draw_checkbox(col3_x + 12, py + 272, "Show Corpse Items", "b_corpse_items")
-        draw_slider("s_corp_r", col3_x + 12, py + 300, 216, "Corpse Range", "b_corpse_range", 10, 600, "%d m")
-        draw_checkbox(col3_x + 12, py + 340, "Quest Items ESP", "b_quest")
-        draw_slider("s_qst_r", col3_x + 12, py + 366, 216, "Quest Range", "b_quest_range", 10, 1000, "%d m")
-
-    elseif ui.tab == 2 then
-        local col1_x = px + 78
-        draw_card(col1_x, py + 30, 355, 481, "Player Chams")
-        draw_checkbox(col1_x + 12, py + 60, "Enable Player Chams", "b_chams")
-        draw_checkbox(col1_x + 12, py + 90, "Visible Only (Vis Check)", "b_chams_vc")
-
-        draw.Text(col1_x + 12, py + 130, "Visible Chams Color:", theme_sub, 12)
-        draw_color_palette(col1_x + 12, py + 150, 331, "b_chams_vis", function(c)
-            cfg.chams_vc = c
-        end)
-
-        draw.Text(col1_x + 12, py + 204, "Occluded Chams Color:", theme_sub, 12)
-        draw_color_palette(col1_x + 12, py + 224, 331, "b_chams_occ", function(c)
-            cfg.chams_oc = c
-        end)
-
-        local col2_x = px + 445
-        draw_card(col2_x, py + 30, 361, 481, "Weapon Chams")
-        draw_checkbox(col2_x + 12, py + 60, "Weapon Chams (Work in Progress)", "b_wep_chams")
-        draw_checkbox(col2_x + 12, py + 90, "Pulse Animation", "b_wep_chams_pulse")
-
-        draw.Text(col2_x + 12, py + 130, "Weapon Chams Color:", theme_sub, 12)
-        draw_color_palette(col2_x + 12, py + 150, 337, "b_wep_chams", function(c)
-            cfg.wep_chams_c = c
-        end)
-
-    elseif ui.tab == 3 then
-        local col1_x = px + 78
-        draw_card(col1_x, py + 30, 236, 481, "Inventory & Item Checker")
-        draw_checkbox(col1_x + 12, py + 60, "Inventory Viewer", "b_inspect")
-        draw_checkbox(col1_x + 12, py + 86, "Show Weapons", "b_inv_weap")
-        draw_checkbox(col1_x + 12, py + 112, "Show Armor", "b_inv_armor")
-        draw_checkbox(col1_x + 12, py + 138, "Show Special Items", "b_inv_special")
-        draw_checkbox(col1_x + 12, py + 164, "Show Misc Items", "b_inv_misc")
-        draw_checkbox(col1_x + 12, py + 196, "Cheater Finder", "b_cheater_finder")
-        draw_checkbox(col1_x + 12, py + 222, "Boss Tracker", "b_boss")
-        draw_checkbox(col1_x + 12, py + 248, "Mod Alert", "b_mod_alert")
-
-        local col2_x = px + 322
-        draw_card(col2_x, py + 30, 236, 481, "FOV Changer & World")
-        draw_checkbox(col2_x + 12, py + 60, "FOV Changer (Not Fully Working)", "b_fov_changer")
-        draw_slider("s_fov_v", col2_x + 12, py + 86, 212, "Field of View", "b_fov_val", 70, 110, "%d deg")
-        draw_checkbox(col2_x + 12, py + 124, "Preserve Sniper Zoom (<35°)", "b_fov_ads_safe")
-        draw_checkbox(col2_x + 12, py + 154, "Remove Grass (No Grass)", "b_nograss")
-        draw_checkbox(col2_x + 12, py + 180, "Remove Foliage", "b_remove_foliage")
-        draw_checkbox(col2_x + 12, py + 206, "Claymore ESP", "b_claymore")
-        draw_checkbox(col2_x + 12, py + 232, "Car ESP", "b_car")
-
-        local col3_x = px + 566
-        draw_card(col3_x, py + 30, 240, 481, "Skin Changer")
-        draw_checkbox(col3_x + 12, py + 60, "Skin Changer (Work in Progress)", "b_skin_enable")
-        draw_button(col3_x + 12, py + 92, 216, 26, "Apply Selected Skins", function()
-            pcall(function()
-                if apply_skins_now then apply_skins_now() end
-                notify.Success("Skins", "Applied selected skins", 3)
-            end)
-        end)
-        draw_button(col3_x + 12, py + 126, 216, 24, "Knife: Karambit", function()
-            pcall(function() menu.Set("b_skin_knife", 1) end)
-            notify.Success("Knife", "Set to Karambit", 2)
-        end)
-        draw_button(col3_x + 12, py + 156, 216, 24, "Knife: Butterfly", function()
-            pcall(function() menu.Set("b_skin_knife", 3) end)
-            notify.Success("Knife", "Set to Butterfly", 2)
-        end)
-        draw_button(col3_x + 12, py + 186, 216, 24, "Gun: M4 Devil", function()
-            pcall(function() menu.Set("b_skin_gun", 5) end)
-            notify.Success("Gun", "Set to M4 Devil", 2)
-        end)
-        draw_button(col3_x + 12, py + 216, 216, 24, "Gun: AKM Banana", function()
-            pcall(function() menu.Set("b_skin_gun", 1) end)
-            notify.Success("Gun", "Set to AKM Banana", 2)
-        end)
-        draw_button(col3_x + 12, py + 246, 216, 24, "Armor: Crusader Pack", function()
-            pcall(function() menu.Set("b_skin_armor", 1) end)
-            notify.Success("Armor", "Set to Crusader", 2)
-        end)
-
-    elseif ui.tab == 4 then
-        local col1_x = px + 78
-        draw_card(col1_x, py + 30, 355, 481, "Config & Menu Settings")
-
-        draw.Text(col1_x + 12, py + 56, "Config Name:", theme_sub, 12)
-
-        local ibx = col1_x + 12
-        local iby = py + 72
-        local ibw = 331
-        local ibh = 22
-        local ib_hov = mx >= ibx and mx <= ibx + ibw and my >= iby and my <= iby + ibh
-        if is_click then
-            ui.cfg_focus = ib_hov
-                    end
-
-        if ui.cfg_focus then
-            for vk = 0x41, 0x5A do
-                local down = input.IsKeyDown(vk)
-                if down and not ui.last_keys[vk] then
-                    ui.cfg_name_buf = ui.cfg_name_buf .. string.char(vk + 32)
-                end
-                ui.last_keys[vk] = down
-            end
-            for vk = 0x30, 0x39 do
-                local down = input.IsKeyDown(vk)
-                if down and not ui.last_keys[vk] then
-                    ui.cfg_name_buf = ui.cfg_name_buf .. string.char(vk)
-                end
-                ui.last_keys[vk] = down
-            end
-            local bs_down = input.IsKeyDown(0x08)
-            if bs_down and not ui.last_keys[0x08] and #ui.cfg_name_buf > 0 then
-                ui.cfg_name_buf = ui.cfg_name_buf:sub(1, -2)
-            end
-            ui.last_keys[0x08] = bs_down
-            local sp_down = input.IsKeyDown(0x20) or input.IsKeyDown(0xBD)
-            if sp_down and not ui.last_keys[0x20] then
-                ui.cfg_name_buf = ui.cfg_name_buf .. "_"
-            end
-            ui.last_keys[0x20] = sp_down
-        end
-
-        draw.RectFilled(ibx, iby, ibw, ibh, ui.cfg_focus and {0.14, 0.15, 0.18, 1.0} or {0.05, 0.05, 0.07, 1.0}, 0)
-        draw.Rect(ibx, iby, ibw, ibh, ui.cfg_focus and theme_col or {0.02, 0.02, 0.02, 1.0}, 0, 1.0)
-        draw.Text(ibx + 6, iby + 3, ui.cfg_name_buf .. (ui.cfg_focus and "_" or ""), theme_col, 12)
-
-        draw_button(col1_x + 12, py + 98, 331, 22, "Create / Save Config", function()
-            local cname = (ui.cfg_name_buf ~= "") and ui.cfg_name_buf or (ui.selected_cfg ~= "" and ui.selected_cfg or "default")
-            save_config(cname)
-            local exists = false
-            for _, cn in ipairs(ui.cfg_files_list) do
-                if cn == cname then exists = true; break end
-            end
-            if not exists then
-                table.insert(ui.cfg_files_list, cname)
-                write_config_list(ui.cfg_files_list)
-            end
-            ui.selected_cfg = cname
-            ui.cfg_name_buf = cname
-        end)
-
-        draw_button(col1_x + 12, py + 124, 105, 22, "Load Config", function()
-            local cname = (ui.selected_cfg ~= "") and ui.selected_cfg or "default"
-            load_config(cname)
-            ui.cfg_name_buf = cname
-        end)
-
-        draw_button(col1_x + 122, py + 124, 105, 22, "Delete Config", function()
-            local new_list = {}
-            for _, cn in ipairs(ui.cfg_files_list) do
-                if cn ~= ui.selected_cfg then
-                    table.insert(new_list, cn)
-                end
-            end
-            if #new_list == 0 then new_list = {"default"} end
-            ui.cfg_files_list = new_list
-            write_config_list(ui.cfg_files_list)
-            ui.selected_cfg = ui.cfg_files_list[1]
-            ui.cfg_name_buf = ui.selected_cfg
-            notify.Warning("Config Removed", ui.selected_cfg, 3)
-        end)
-
-        draw_button(col1_x + 232, py + 124, 111, 22, "Reset All", function()
-            if _G.ResetAllBobaOptions then
-                _G.ResetAllBobaOptions()
-                notify.Success("Reset", "All options reset to default", 3)
-            end
-        end)
-
-        draw.Text(col1_x + 12, py + 150, "Saved Configurations:", theme_sub, 12)
-
-        local list_x = col1_x + 12
-        local list_y = py + 164
-        local list_w = 331
-        local list_h = 96
-        draw.RectFilled(list_x, list_y, list_w, list_h, {0.05, 0.05, 0.07, 0.9}, 0)
-        draw.Rect(list_x, list_y, list_w, list_h, {0.02, 0.02, 0.02, 1.0}, 0, 1.0)
-
-        for i, cname in ipairs(ui.cfg_files_list) do
-            local ry = list_y + 2 + (i - 1) * 20
-            if ry + 18 <= list_y + list_h then
-                local is_sel = (ui.selected_cfg == cname)
-                local r_hov = mx >= list_x + 2 and mx <= list_x + list_w - 2 and my >= ry and my <= ry + 18
-
-                if is_sel then
-                    draw.RectFilled(list_x + 2, ry, list_w - 4, 18, {theme_col[1], theme_col[2], theme_col[3], 0.35}, 0)
-                    draw.Text(list_x + 8, ry + 2, ">  " .. cname, theme_col, 12)
-                else
-                    if r_hov then
-                        draw.RectFilled(list_x + 2, ry, list_w - 4, 18, {0.14, 0.15, 0.18, 0.6}, 0)
-                    end
-                    draw.Text(list_x + 8, ry + 2, "   " .. cname, theme_dim, 12)
-                end
-
-                if is_click and r_hov then
-                    ui.selected_cfg = cname
-                    ui.cfg_name_buf = cname
-                end
-            end
-        end
-
-        draw_checkbox(col1_x + 12, py + 274, "Hard Side", "b_hard_side")
-        draw_checkbox(col1_x + 183, py + 274, "Rainbow Mode", "b_rainbow_mode")
-
-        draw.Text(col1_x + 12, py + 304, "Menu Toggle Key:", theme_sub, 12)
-        local is_b_menu = (ui.active_bind == "menu_key")
-        local key_btn_text = is_b_menu and "Press..." or ("Toggle Key: [ " .. get_vk_name(cur_toggle_vk) .. " ]")
-        draw_button(col1_x + 12, py + 320, 331, 22, key_btn_text, function()
-            if ui.active_bind == "menu_key" then
-                ui.active_bind = nil
-                ui.bind_armed = false
-            else
-                ui.active_bind = "menu_key"
-                ui.bind_armed = false
-            end
-        end)
-
-        draw.Text(col1_x + 12, py + 348, "Menu Theme & Font Color:", theme_sub, 12)
-        for i, t in ipairs(THEMES) do
-            local tid = i - 1
-            local col_idx = (i - 1) % 5
-            local row_idx = math.floor((i - 1) / 5)
-            local tx = col1_x + 12 + col_idx * (62 + 5)
-            local ty = py + 364 + row_idx * 23
-            local tw = 62
-            local th = 20
-            local is_cur = (cur_theme_idx == tid)
-            local hov = mx >= tx and mx <= tx + tw and my >= ty and my <= ty + th
-
-            draw.RectFilled(tx, ty, tw, th, is_cur and {0.18, 0.19, 0.22, 1.0} or {0.06, 0.06, 0.08, 0.9}, 0)
-            draw.Rect(tx, ty, tw, th, is_cur and t.col or (hov and t.col or {0.02, 0.02, 0.02, 1.0}), 0, is_cur and 1.5 or 1.0)
-
-            local nw, _ = draw.GetTextSize(t.name, 11)
-            nw = (type(nw) == "number" and nw) or 30
-            local nx = tx + math.floor((tw - nw) / 2)
-            draw.Text(nx, ty + 3, t.name, is_cur and t.col or (hov and t.col or {0.65, 0.65, 0.65, 1.0}), 11)
-
-            if is_click and hov then
-                set_val("b_menu_theme", tid)
-            end
-        end
-
-        draw_button(col1_x + 12, py + 420, 331, 22, "Reset UI Position", function()
-            ui.x = 100
-            ui.y = 60
-        end)
-
-        local col2_x = px + 445
-        draw_card(col2_x, py + 30, 361, 481, "Crosshair")
-        draw_checkbox(col2_x + 12, py + 60, "Enable Crosshair", "b_cross")
-        draw_slider("s_cr_sz", col2_x + 12, py + 84, 337, "Crosshair Size", "b_cross_sz", 2, 30, "%d px")
-        draw_slider("s_cr_gp", col2_x + 12, py + 116, 337, "Crosshair Gap", "b_cross_gap", 0, 20, "%d px")
-        draw_slider("s_cr_th", col2_x + 12, py + 148, 337, "Crosshair Thickness", "b_cross_thick", 1, 6, "%d px")
-        draw_checkbox(col2_x + 12, py + 180, "Spin Animation", "b_cross_spin")
-        draw_slider("s_cr_spn", col2_x + 12, py + 204, 337, "Spin Speed", "b_cross_spin_spd", 1, 20, "%d")
-        draw_checkbox(col2_x + 12, py + 236, "Pulse Animation", "b_cross_pulse")
-        draw_slider("s_cr_pls", col2_x + 12, py + 260, 337, "Pulse Speed", "b_cross_pulse_spd", 1, 20, "%d")
-
-        draw.Text(col2_x + 12, py + 292, "Crosshair Color:", theme_sub, 12)
-        draw_color_palette(col2_x + 12, py + 308, 337, "b_cross", function(c)
-            cfg.cross_c = c
-        end)
-
-        draw.Text(col2_x + 12, py + 356, "Crosshair Styles:", theme_sub, 12)
-        draw_button(col2_x + 12, py + 374, 163, 24, "Classic Cross", function()
-            set_val("b_cross_style", 0)
-        end)
-        draw_button(col2_x + 186, py + 374, 163, 24, "Center Dot", function()
-            set_val("b_cross_style", 1)
-        end)
-        draw_button(col2_x + 12, py + 402, 163, 24, "Circle Outline", function()
-            set_val("b_cross_style", 2)
-        end)
-        draw_button(col2_x + 186, py + 402, 163, 24, "T-Shape Cross", function()
-            set_val("b_cross_style", 3)
-        end)
-        draw_button(col2_x + 12, py + 430, 163, 24, "Arrow / Chevron", function()
-            set_val("b_cross_style", 4)
-        end)
-        draw_button(col2_x + 186, py + 430, 163, 24, "Circle + Cross", function()
-            set_val("b_cross_style", 5)
-        end)
-    end
-
-    ui.last_lmb = lmb
+        setup_toggle("b_npc_aim", {
+            "b_npc_aim_key", "b_npc_aim_bone", "b_npc_aim_fov", "b_npc_aim_smooth",
+            "b_npc_aim_pred", "b_npc_aim_fov_draw"
+        })
+        setup_toggle("b_npc_aim_fov_draw", { "b_npc_aim_fov_c", "b_npc_aim_fov_filled" })
+    end)
 end
 
-return draw_menu
-end)()
+pcall(init_native_menu)
+local draw_nixware_menu = function() end
 
 local draw_player_loadout = (function()
     local loadout_ui = {
@@ -7347,7 +6872,15 @@ local draw_player_loadout = (function()
         return best_p
     end
 
+    local loadout_cache = {}
     local function get_player_loadout_data(wp)
+        if not wp or not wp.name then return {}, {}, nil end
+        local now_t = tick()
+        local cached = loadout_cache[wp.name]
+        if cached and (now_t - cached.t) < 0.5 then
+            return cached.top_row, cached.bot_row, cached.active_tool
+        end
+
         local top_row = { nil, nil, nil, nil, nil, nil, nil, nil }
         local bot_row = { nil, nil, nil, nil, nil, nil, nil }
         local active_tool = nil
@@ -7455,6 +6988,7 @@ local draw_player_loadout = (function()
             end
         end
 
+        loadout_cache[wp.name] = { top_row = top_row, bot_row = bot_row, active_tool = active_tool, t = now_t }
         return top_row, bot_row, active_tool
     end
 
@@ -7470,11 +7004,7 @@ local draw_player_loadout = (function()
         local wp = find_best_target()
         local is_preview = false
         if not wp then
-            if boba_menu_open then
-                is_preview = true
-            else
-                return
-            end
+            is_preview = true
         end
 
         local top_labels = {"HELM", "MASK", "VEST", "SHIRT", "BAG", "KNEE", "PANTS", "GLOVE"}
@@ -7483,7 +7013,7 @@ local draw_player_loadout = (function()
         local top_row, bot_row, active_tool
         local pname, pdist
         if is_preview then
-            pname = "Target Player"
+            pname = "Target Player (Preview)"
             pdist = 124
             top_row = {"Altyn", "Balaclava", "JPC", "WastelandShirt", "Attak5", "Kneepads", "WastelandPants", "CombatGloves"}
             bot_row = {"AKM", "Mosin", "Makarov", "AI2", "AA2", "PMN2", nil}
@@ -7494,8 +7024,6 @@ local draw_player_loadout = (function()
             pdist = math.floor((wp.entity and wp.entity:DistanceTo()) or 0)
         end
 
-        local cur_theme_idx = get_val("b_menu_theme", 0) or 0
-        local cur_theme_data = THEMES[cur_theme_idx + 1] or THEMES[1]
         local is_rainbow = (get_val("b_rainbow_mode", false) == true)
         local theme_col, theme_sub
         if is_rainbow then
@@ -7503,7 +7031,7 @@ local draw_player_loadout = (function()
             theme_col = hsv_to_rgb((now_t * 0.35) % 1.0, 0.85, 1.0)
             theme_sub = hsv_to_rgb((now_t * 0.35 + 0.38) % 1.0, 0.85, 1.0)
         else
-            theme_col = cur_theme_data.col
+            theme_col = cfg.loadout_c or mc("b_loadout_c", {0.4, 0.8, 1, 1})
             theme_sub = { theme_col[1] * 0.88, theme_col[2] * 0.88, theme_col[3] * 0.88, 1.0 }
         end
 
@@ -7529,13 +7057,11 @@ local draw_player_loadout = (function()
         local lmb = input.IsKeyDown(0x01) or false
         local is_click = lmb and not loadout_ui.last_lmb
 
-        if boba_menu_open then
-            if is_click and not loadout_ui.dragging then
-                if mx >= px and mx <= px + total_w and my >= py and my <= py + 30 then
-                    loadout_ui.dragging = true
-                    loadout_ui.drag_ox = mx - px
-                    loadout_ui.drag_oy = my - py
-                end
+        if is_click and not loadout_ui.dragging then
+            if mx >= px and mx <= px + total_w and my >= py and my <= py + 30 then
+                loadout_ui.dragging = true
+                loadout_ui.drag_ox = mx - px
+                loadout_ui.drag_oy = my - py
             end
         end
 
@@ -7547,8 +7073,8 @@ local draw_player_loadout = (function()
                 py = loadout_ui.y
             else
                 loadout_ui.dragging = false
-                set_val("b_loadout_x", loadout_ui.x)
-                set_val("b_loadout_y", loadout_ui.y)
+                pcall(menu.Set, "b_loadout_x", loadout_ui.x)
+                pcall(menu.Set, "b_loadout_y", loadout_ui.y)
             end
         end
         loadout_ui.last_lmb = lmb
@@ -7668,56 +7194,75 @@ local draw_player_loadout = (function()
 end)()
 
 
+local last_perf_cleanup = 0
 _G.on_frame = function()
-local pkey = mk("b_panic")
-if pkey ~= 0 and input.IsKeyDown(pkey) then
-if not panic_held then
-    panic_held = true
-    do_panic()
-end
-else
-panic_held = false
-end
+    local now_t = tick()
+    if (now_t - last_perf_cleanup) > 15 then
+        last_perf_cleanup = now_t
+        if world.enemy_health then
+            local count = 0
+            for _ in pairs(world.enemy_health) do count = count + 1 end
+            if count > 50 then
+                world.enemy_health = {}
+                world.enemy_last_pos = {}
+            end
+        end
+        if world.hacker_tracker then
+            local count = 0
+            for _ in pairs(world.hacker_tracker) do count = count + 1 end
+            if count > 50 then
+                world.hacker_tracker = {}
+            end
+        end
+        pcall(collectgarbage, "step", 150)
+    end
 
-if panic_on then return end
+    local pkey = mk("b_panic")
+    if pkey ~= 0 and input.IsKeyDown(pkey) then
+        if not panic_held then
+            panic_held = true
+            do_panic()
+        end
+    else
+        panic_held = false
+    end
 
-pcall(cache_cfg)
-pcall(run_fov_changer)
+    if panic_on then return end
 
-pcall(run_wep_chams)
+    pcall(cache_cfg)
+    -- wep chams removed
 
-pcall(auto_apply_skins)
+    frame_players = entity.GetPlayers() or {}
 
-frame_players = entity.GetPlayers() or {}
+    pcall(draw_player_chams)
+    pcall(draw_player_esp)
+    pcall(draw_npc_esp)
+    pcall(draw_world_esp)
 
-pcall(draw_player_esp)
-pcall(draw_npc_esp)
-pcall(draw_world_esp)
+    pcall(run_player_aim)
+    pcall(run_npc_aim)
+    pcall(run_silent_aim)
 
-pcall(run_player_aim)
-pcall(run_npc_aim)
-pcall(run_silent_aim)
+    pcall(draw_crosshair)
+    pcall(check_combat_hits)
+    pcall(draw_hitmarker)
+    pcall(draw_bullet_tracers)
+    pcall(draw_hit_logs)
+    pcall(draw_player_loadout)
+    if cfg.inspect then
+        pcall(draw_inventory)
+    end
 
-pcall(draw_watermark)
-pcall(draw_crosshair)
-pcall(draw_inventory)
-pcall(draw_claymores)
-pcall(draw_cars)
-pcall(draw_radar)
-pcall(update_hacker_detector)
-pcall(check_combat_hits)
-pcall(draw_hitmarker)
-pcall(draw_bullet_tracers)
-pcall(draw_hit_logs)
-pcall(draw_corpse_markers)
-pcall(draw_boss_panel)
-pcall(draw_mod_alert)
-pcall(draw_cheater_panel)
-pcall(draw_player_loadout)
-local m_ok, m_err = pcall(draw_nixware_menu)
-if not m_ok and m_err then
-    print("[BOBA MENU ERROR] " .. tostring(m_err))
-end
+    if cfg.cheater_finder then
+        pcall(update_hacker_detector)
+        if cfg.cheater_panel then
+            pcall(draw_cheater_panel)
+        end
+    end
+
+    if cfg.boss then
+        pcall(draw_boss_panel)
+    end
 end
 OnFrame = _G.on_frame
 on_frame = _G.on_frame
@@ -7727,24 +7272,16 @@ _G.on_frame = _G.on_frame
 _G.onFrame = _G.on_frame
 
 
-thread.Create(scan_containers, 15000)
-thread.Create(scan_world_items, 10000)
-thread.Create(scan_quests, 20000)
-thread.Create(scan_npcs, 3500)
-thread.Create(scan_players, 5000)
+thread.Create(scan_containers, 10000)
+thread.Create(scan_world_items, 8000)
+thread.Create(scan_quests, 30000)
+thread.Create(scan_npcs, 6000)
+thread.Create(scan_players, 10000)
 thread.Create(scan_extracts, 10000)
-thread.Create(scan_hazards, 20000)
-thread.Create(scan_claymores, 10000)
-thread.Create(scan_cars, 5000)
+thread.Create(update_bosses, 20000)
 
-thread.Create(function()
-    pcall(apply_world_mods)
-    pcall(apply_foliage_mods)
-end, 3000)
-
-thread.Create(update_bosses, 2500)
-thread.Create(update_mod_check, 2500)
-thread.Create(cache_cfg, 1500)
+pcall(apply_world_mods)
+pcall(apply_foliage_mods)
 
 
 OnPlayerAdded = function(player)
@@ -7761,38 +7298,36 @@ pcall(function()
     if remotes then
         local s_msg = remotes:FindFirstChild("ServerMessage")
         if s_msg and s_msg.OnClientEvent then
-            s_msg.OnClientEvent:Connect(function(msg)
+            local c = s_msg.OnClientEvent:Connect(function(msg)
                 if type(msg) == "string" then parse_kill_message(msg) end
             end)
+            table.insert(_G.boba_connections, c)
         end
         local n_msg = remotes:FindFirstChild("NotificationMessage")
         if n_msg and n_msg.OnClientEvent then
-            n_msg.OnClientEvent:Connect(function(msg)
+            local c = n_msg.OnClientEvent:Connect(function(msg)
                 if type(msg) == "string" then parse_kill_message(msg) end
             end)
+            table.insert(_G.boba_connections, c)
         end
     end
     local tcs = game:GetService("TextChatService")
     if tcs and tcs.MessageReceived then
-        tcs.MessageReceived:Connect(function(msgObj)
+        local c = tcs.MessageReceived:Connect(function(msgObj)
             if msgObj and msgObj.Text then parse_kill_message(msgObj.Text) end
         end)
-    end
-    local logs = game:GetService("LogService")
-    if logs and logs.MessageOut then
-        logs.MessageOut:Connect(function(msg)
-            parse_kill_message(msg)
-        end)
+        table.insert(_G.boba_connections, c)
     end
 end)
 
 notify.Success("BOBA loaded", "Project Delta Suite")
-print("[BOBA] loaded — " .. entity.GetPlayerCount() .. " players online")
+print("[BOBA] loaded - " .. entity.GetPlayerCount() .. " players online")
 pcall(function()
     local act = read_active_cfg and read_active_cfg() or "default"
     if world.menu_ui then
         world.menu_ui.selected_cfg = act
         world.menu_ui.cfg_name_buf = act
     end
-    load_config(act)
+    -- Startup auto-load removed: configs only load when user picks and loads them
 end)
+-- boba suite v2.1 (updated)
