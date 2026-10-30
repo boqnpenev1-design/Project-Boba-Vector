@@ -103,6 +103,7 @@ boba_store = {
     b_loot_range = 400,
     b_loot_filter = 0,
     b_corpse = false,
+    b_corpse_op_only = false,
     b_corpse_items = false,
     b_corpse_range = 500,
     b_quest = false,
@@ -579,6 +580,110 @@ KeyChain=true, EstonianBorderMap=true, Map=true,
 AramidFabric=true, CottonFabric=true, LinenFabric=true, RipstopFabric=true
 }
 
+local CORPSE_OP_ITEMS = {
+    -- Ranged Weapons
+    AsVal=true, ADAR15=true, TFZ0=true, MP443=true, PPSH41=true, SVD=true, PKM=true,
+    Mosin=true, Makarov=true, AKM=true, TT33=true, IZh12=true, MP5SD=true, VZ61=true,
+    Saiga12=true, TFZ98S=true, IZh81=true, RPG7=true, SKS=true, AKMN=true, R700=true,
+    MK23=true, FAL=true, M4=true, GoldenMakarov=true, TOZ106=true, NagantRevolver=true,
+    Groza=true, TOZ87=true, FlareGun=true, SPSh44=true,
+    -- Melee Weapons
+    AnarchyTomahawk=true, ButterflyKnife=true, Cutlass=true, DV2=true, GoldenDV2=true,
+    RealGoldenDV2=true, Greatsword=true, IceAxe=true, IceDagger=true, Karambit=true,
+    Kukri=true, Longsword=true, M9Fade=true, M9XR7=true, PlasmaNinjato=true, Scythe=true,
+    -- High Tier Armor & Helmets
+    Altyn=true, AltynVisor=true, FastMT=true, FastVisor=true, MaskaVisor=true, ZSh=true,
+    ZShVisor=true, ["6B43"]=true, ["6B47"]=true, ["6B23"]=true, ["6B5"]=true, ["6B2"]=true,
+    ["6B27"]=true, IOTV4=true, DozerArmor=true, TitanShield=true, HSPV=true, QuadNVG=true,
+    ONV9=true, ScavKingHelmet=true, ScavKingVest=true, Kulon=true, JPC=true, Smersh=true,
+    Attak5=true, SpecopsBackpack=true, GhillieHood=true, GhillieTorso=true, GhillieLegs=true,
+    Lvl4Plate=true,
+    -- Keys & Keycards
+    RedCard=true, BlueCard=true, OrangeCard=true, EVACKey=true, FactoryGarageKey=true,
+    FrigateKey=true, LighthouseKey=true, PoolKey=true, AirfieldTunnelsKey=true,
+    GallerySecurityKey=true, CraneKey=true, HydroBasementKey=true, DormA211Key=true,
+    DormB203Key=true, B05Key=true, ATCKey=true, Apartment13Key=true, Apartment21Key=true,
+    CitySubstationtKey=true, FuelingStationKey=true, VillageKey=true, Villa1Key=true,
+    -- High Value Barter / Electronics / Valuables
+    GPU=true, CPU=true, SSD=true, RAM=true, PSU=true, Gold50g=true, GoldSkull=true,
+    GoldWatch=true, SolterStatue=true, Matryoshka=true, Teapot=true, WeddingRing=true,
+    GoldenTicket=true, AntonPlush=true, DozerPlush=true, EnzoPlush=true, WhisperPlush=true,
+    DAGR=true, PDA=true, Smartphone=true, PortableConsole=true, Defib=true, Radio=true,
+    GiftTier1=true, GiftTier2=true, GiftTier3=true, Rubles=true,
+    -- Serums
+    SerumGreen=true, SerumPurple=true, SerumRed=true, SerumYellow=true, ImmunsterReactor=true,
+    -- Extended & High Tier Mags / Attachments
+    ["762x39Rnd75Mag"]=true, ["762x25Rnd71Mag"]=true, Mag556Rnd100=true,
+    ["9x19MP5DrumMAG"]=true, SaigaMag20rnd=true, ["762x54Rnd20Mag"]=true,
+    ["9x18MakarovDrumMag"]=true, ["9x18vzDrumMag"]=true, AmmoBoxPKM100rnd=true,
+    TimberWolfSuppressor=true, KACSuppressor=true, PBS1=true, T12W=true, ELCAN=true,
+    ACOG=true, PEQ15=true
+}
+
+local CORPSE_TRASH_EXCLUDE = {
+    -- Fabrics
+    CottonFabric=true, AramidFabric=true, LinenFabric=true, RipstopFabric=true,
+    -- Basic Clothes / Wastelander / Civilian
+    WastelandShirt=true, WastelandPants=true, CivilianShirt=true, CivilianPants=true,
+    SummerShirt=true, SummerPants=true, CamoShirt=true, CamoPants=true,
+    GorkaShirt=true, GorkaPants=true, HandWraps=true, SewnMask=true, Balaclava=true,
+    WastelandBackpack=true,
+    -- Meds
+    Bandage=true, WoundDressing=true, Rags=true, AI2=true, AA2=true, IFAK=true, AI4=true,
+    Splint=true,
+    -- Junk / Trash
+    Beans=true, ChocolateBar=true, Jerky=true, WaterBottle=true, BloxyCola=true,
+    CatfrogSoda=true, KevCola=true, ResKola=true, CondensedMilk=true, Tortilla=true,
+    Nails=true, Bolts=true, Nuts=true, DuctTape=true, SuperGlue=true, Soap=true,
+    MatchBox=true, LightBulb=true, Wrench=true, FlatScrewdriver=true, PH2Screwdriver=true,
+    SteelPipe=true, Planks=true, MetalChunks=true, Gunpowder=true, AABattery=true,
+    Cologne=true, NaCl=true, GP5Filter=true, Sandbag=true, Barricade=true, KeyChain=true,
+    EstonianBorderMap=true, Map=true, OilCan=true, RepairKit=true, Hammer=true,
+    Football=true, Snowball=true, TankCap=true, CFan=true, CopperCoil=true, Fuze=true
+}
+
+local function is_corpse_op_loot(name)
+    if not name or name == "" then return false end
+    local base = name:match("^(.-)%s*x%d+$") or name
+    if CORPSE_TRASH_EXCLUDE[base] then return false end
+
+    local low = base:lower()
+    if low:find("fabric") or low:find("shirt") or low:find("pants") or low:find("bandage")
+        or low:find("med") or low:find("cola") or low:find("food") or low:find("rags")
+        or low:find("dressing") or low:find("splint") or low:find("backpack") or low:find("hat")
+        or low:find("cap") or low:find("mask") or low:find("glove") or low:find("wrap")
+        or low:find("wasteland") or low:find("civilian") or low:find("summer") or low:find("camo")
+        or low:find("gorka") or low:find("water") or low:find("jerky") or low:find("beans")
+        or low:find("keychain") or low:find("map") then
+        return false
+    end
+
+    if CORPSE_OP_ITEMS[base] then return true end
+
+    if low:find("rifle") or low:find("pistol") or low:find("shotgun") or low:find("smg")
+        or low:find("sniper") or low:find("carbine") or low:find("gun") or low:find("revolver")
+        or low:find("sword") or low:find("blade") or low:find("dagger") or low:find("knife")
+        or low:find("tomahawk") or low:find("axe") or low:find("scythe") or low:find("fal")
+        or low:find("m4") or low:find("svd") or low:find("mosin") or low:find("r700")
+        or low:find("pkm") or low:find("val") or low:find("akm") or low:find("saiga") then
+        return true
+    end
+
+    if low:find("card") or low:find("key") then
+        return true
+    end
+
+    if low:find("plush") or low:find("gold") or low:find("ticket") or low:find("gpu")
+        or low:find("cpu") or low:find("ssd") or low:find("ram") or low:find("serum")
+        or low:find("thermal") or low:find("nvg") or low:find("altyn") or low:find("fastmt")
+        or low:find("maska") or low:find("6b43") or low:find("iotv") or low:find("dozer")
+        or low:find("dagr") or low:find("pda") or low:find("rubles") then
+        return true
+    end
+
+    return false
+end
+
 local function is_good_item(name)
 if not name or name == "" then return false end
 if GOOD_CACHE[name] ~= nil then return GOOD_CACHE[name] end
@@ -872,6 +977,7 @@ local function set_val(id, val)
     elseif id == "b_loot_range" then cfg.loot_range = val
     elseif id == "b_loot_filter" then cfg.loot_f = val
     elseif id == "b_corpse" then cfg.corpse = val
+    elseif id == "b_corpse_op_only" then cfg.corpse_op_only = val
     elseif id == "b_corpse_items" then cfg.corpse_i = val
     elseif id == "b_corpse_range" then cfg.corpse_r = val
     elseif id == "b_corpse_x" then cfg.corpse_x = val
@@ -1113,7 +1219,7 @@ local CFG_IDS = {
 "b_npc","b_npc_box","b_npc_hp","b_npc_name","b_npc_dist","b_npc_skel","b_npc_range",
 "b_cont","b_cont_items","b_cont_filter","b_cont_range",
 "b_loot","b_loot_range","b_loot_filter",
-"b_corpse","b_corpse_items","b_corpse_range","b_corpse_r",
+"b_corpse","b_corpse_op_only","b_corpse_items","b_corpse_range","b_corpse_r",
 "b_quest","b_quest_range",
 "b_extract","b_extract_range","b_hazard","b_hazard_range",
 "b_bullet_tracers","b_tracer_duration","b_hitmarker","b_hit_logs","b_hit_log_duration",
@@ -1735,28 +1841,32 @@ if not part or not utility.IsValid(part) then return end
 local hum = m:FindFirstChildOfClass("Humanoid")
 if hum and hum.Health and hum.Health <= 0 then
     local cached = corpse_inv_cache[m]
-    local cnt, good_cnt
+    local cnt, good_cnt, op_cnt
     if cached then
         cnt = cached.cnt
         good_cnt = cached.good_cnt
+        op_cnt = cached.op_cnt
     else
-        if cfg.corpse_i then
-            cnt = get_inventory(m)
-            if cnt then
-                for k = 1, #cnt do
-                    if is_good_item(cnt[k]) then
-                        if not good_cnt then good_cnt = {} end
-                        good_cnt[#good_cnt + 1] = cnt[k]
-                    end
+        cnt = get_inventory(m)
+        if cnt then
+            for k = 1, #cnt do
+                if is_good_item(cnt[k]) then
+                    if not good_cnt then good_cnt = {} end
+                    good_cnt[#good_cnt + 1] = cnt[k]
+                end
+                if is_corpse_op_loot(cnt[k]) then
+                    if not op_cnt then op_cnt = {} end
+                    op_cnt[#op_cnt + 1] = cnt[k]
                 end
             end
         end
-        corpse_inv_cache[m] = { cnt = cnt, good_cnt = good_cnt }
+        corpse_inv_cache[m] = { cnt = cnt, good_cnt = good_cnt, op_cnt = op_cnt }
     end
     corpses_r[#corpses_r+1] = {
         name = m.Name, part = part,
-        contents = cnt,
-        good_contents = good_cnt
+        contents = (cached and cached.cnt) or cnt,
+        good_contents = (cached and cached.good_cnt) or good_cnt,
+        op_contents = (cached and cached.op_cnt) or op_cnt
     }
 else
     items_r[#items_r+1] = { name = m.Name, part = part, cat = get_item_category(m.Name) }
@@ -2246,6 +2356,7 @@ cfg.loot_c      = mc("b_loot_c", mc("b_loot", {0.4, 1, 0.4, 1}))
 cfg.loot_range  = (type(mg("b_loot_range", 400)) == "number" and mg("b_loot_range", 400)) or 400
 cfg.corpse      = mg("b_corpse", false)
 cfg.corpse_c    = mc("b_corpse_c", mc("b_corpse", {0.8, 0.2, 0.2, 1}))
+cfg.corpse_op_only = mg("b_corpse_op_only", false)
 cfg.corpse_i    = mg("b_corpse_items", false)
 cfg.corpse_items_c = mc("b_corpse_items_c", mc("b_corpse_items", {0.85, 0.85, 0.85, 1}))
 cfg.corpse_r    = (type(mg("b_corpse_r", mg("b_corpse_range", 500))) == "number" and mg("b_corpse_r", mg("b_corpse_range", 500))) or 500
@@ -2722,7 +2833,8 @@ local max_cnt = math.min(#contents, 12)
 for j = 1, max_cnt do
     local itxt = contents[j]
     local itw = #itxt * 6.5
-    local icol = (is_op_loot and is_op_loot(itxt)) and {1, 0.85, 0.2, 1} or (cfg.cont_items_c or cfg.corpse_items_c or GRAY)
+    local is_op = (is_op_loot and is_op_loot(itxt)) or (is_corpse_op_loot and is_corpse_op_loot(itxt))
+    local icol = is_op and {1, 0.85, 0.2, 1} or (cfg.cont_items_c or cfg.corpse_items_c or GRAY)
     draw.Text(sx - itw*0.5, ly, itxt, icol, 11)
     ly = ly + 12
 end
@@ -2774,13 +2886,24 @@ if cfg.corpse then
 local max_c_dist = (cfg.corpse_r or 500) * STUDS_PER_M
 for i = 1, #world.corpses do
     local c = world.corpses[i]
-    if c.part and utility.IsValid(c.part) then
+    local should_draw = true
+    local corpse_items = nil
+    if cfg.corpse_op_only then
+        if not c.op_contents or #c.op_contents == 0 then
+            should_draw = false
+        else
+            corpse_items = c.op_contents
+        end
+    elseif cfg.corpse_i then
+        corpse_items = c.good_contents or c.contents
+    end
+
+    if should_draw and c.part and utility.IsValid(c.part) then
         local pos = c.part.Position
         if pos and dist3(pos.X, pos.Y, pos.Z, cam.X, cam.Y, cam.Z) <= max_c_dist then
             local label = "CORPSE: " .. c.name
-            local corpse_items = (cfg.corpse_i and c.good_contents) or c.contents
             draw_world_label(c.part, label, cfg.corpse_c,
-                cfg.corpse_r, corpse_items, cfg.corpse_i, cam)
+                cfg.corpse_r, corpse_items, (cfg.corpse_i or cfg.corpse_op_only), cam)
         end
     end
 end
@@ -6327,6 +6450,7 @@ local init_native_menu = function()
         menu.AddCheckbox(tab_wld, "World ESP", "b_corpse", "Enable Corpse ESP", false)
         menu.AddColorpicker(tab_wld, "World ESP", "b_corpse_c", "Corpse Color", {0.8, 0.2, 0.2, 1}, { parent = "b_corpse" })
         menu.AddCheckbox(tab_wld, "World ESP", "b_corpse_x", "Corpse Marker", false, { parent = "b_corpse" })
+        menu.AddCheckbox(tab_wld, "World ESP", "b_corpse_op_only", "Only OP Corpse Items", false, { parent = "b_corpse" })
         menu.AddCheckbox(tab_wld, "World ESP", "b_corpse_items", "Show Corpse Items", false, { parent = "b_corpse" })
         menu.AddColorpicker(tab_wld, "World ESP", "b_corpse_items_c", "Corpse Items Color", {0.85, 0.85, 0.85, 1}, { parent = "b_corpse_items" })
         menu.AddSliderInt(tab_wld, "World ESP", "b_corpse_r", "Corpse Range (m)", 10, 500, 200, "%dm", { parent = "b_corpse" })
@@ -6356,7 +6480,7 @@ local init_native_menu = function()
         setup_toggle("b_loot", { "b_loot_c", "b_loot_range" }, function(on)
             if on and scan_world_items then pcall(scan_world_items) end
         end)
-        setup_toggle("b_corpse", { "b_corpse_c", "b_corpse_x", "b_corpse_items", "b_corpse_r" })
+        setup_toggle("b_corpse", { "b_corpse_c", "b_corpse_x", "b_corpse_op_only", "b_corpse_items", "b_corpse_r" })
         setup_toggle("b_corpse_items", { "b_corpse_items_c" })
         setup_toggle("b_quest", { "b_quest_c", "b_quest_range" }, function(on)
             if on and scan_quests then pcall(scan_quests) end
@@ -7328,6 +7452,5 @@ pcall(function()
         world.menu_ui.selected_cfg = act
         world.menu_ui.cfg_name_buf = act
     end
-    -- Startup auto-load removed: configs only load when user picks and loads them
 end)
--- boba suite v2.1 (updated)
+-- boba v2.1
